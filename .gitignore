@@ -1,8 +1,8 @@
-/.settings
-/ToUTF8
-/bin
-/doc
-/logs
+.settings/
+ToUTF8/
+bin/
+doc/
+logs/
 *.sql
 *.tar
 *.txt
