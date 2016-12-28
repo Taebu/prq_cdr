@@ -1,0 +1,79 @@
+/* sktl db생성 start                */
+create database sktl;
+
+grant all privileges on sktl.* to sktl@localhost identified by 
+'sktl@9495' with grant option;
+
+grant all privileges on sktl.* to sktl@"%" identified by 
+'sktl@9495' with grant option;
+
+use sktl;
+
+/* sktl db생성 end                  */
+
+
+/* 테이블 생성 start */
+/* drop table safen_master; 
+alter table safen_master add account_cd varchar(20) not null default '' comment '상점전화번호:032###XXXX';
+alter table safen_master add (dealed_dt datetime NOT NULL DEFAULT '0000-00-00 00:00:00' comment '사용일');
+*/
+CREATE TABLE safen_master (
+  safen varchar(20) NOT NULL DEFAULT '' comment '안심번호(0504로시작)',
+  safen_in varchar(20) not null default '' comment '착신지전화번호',
+  status_cd varchar(1) NOT NULL DEFAULT '' comment '사용여부 u:사용(used), e:미사용<사용가능enable>, d:사용불가(disable), i:처리중(ing), a:상태를 알 수 없음<초기값>',
+  group_cd varchar(10) not null default '' comment '그룹코드',
+  account_cd varchar(20) not null default '' comment '상점전화번호:032###XXXX',
+  create_dt datetime NOT NULL DEFAULT '0000-00-00 00:00:00' comment '생성일',
+  update_dt datetime NOT NULL DEFAULT '0000-00-00 00:00:00' comment '수정일',
+  dealed_dt datetime NOT NULL DEFAULT '0000-00-00 00:00:00' comment '사용일'
+  PRIMARY KEY (safen),
+  KEY(account_cd),
+  KEY(dealed_dt)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8 COMMENT='안심번호 마스타(SafeNumber Master)';
+
+/* drop table safen_cmd_queue; */
+CREATE TABLE safen_cmd_queue (
+  seq int(11) NOT NULL AUTO_INCREMENT comment '일련번호',
+  safen varchar(20) NOT NULL comment '안심번호(0504로시작)',
+  safen_in varchar(20) DEFAULT NULL comment '착신지전화번호',
+  status_cd varchar(1) DEFAULT '' comment '공백:초기, i:진행중, s:성공, e:오류',
+  result_cd varchar(4) default '' comment '응답코드<0000:성공, E101:Network장애, E102: System장애, E201:제휴사인증실패, E202:유효기간만료, E301:안심번호소진, E401:Data Not Found, E402: Data Overlap, E501:전문오류, E502:전화번호오류>',
+  create_dt datetime NOT NULL DEFAULT '0000-00-00 00:00:00' comment '생성일',
+  PRIMARY KEY (seq)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8 COMMENT='안심번호 요청';
+
+/* drop table safen_cmd_hist_201606; */
+CREATE TABLE safen_cmd_hist_201606 (
+  seq int(11) NOT NULL AUTO_INCREMENT comment '일련번호',
+  safen varchar(20) NOT NULL comment '안심번호(0504로시작)',
+  safen_in varchar(20) DEFAULT NULL comment '착신지전화번호',
+  status_cd varchar(1) DEFAULT NULL comment '공백:초기, i:진행중, s:성공, e:오류',
+  result_cd varchar(4) default '' comment '응답코드<0000:성공, E101:Network장애, E102: System장애, E201:제휴사인증실패, E202:유효기간만료, E301:안심번호소진, E401:Data Not Found, E402: Data Overlap, E501:전문오류, E502:전화번호오류>',
+  create_dt datetime NOT NULL DEFAULT '0000-00-00 00:00:00' comment '생성일',
+  PRIMARY KEY (seq)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8 COMMENT='안심번호 히스토리';
+
+/* drop table safen_cdr; */
+CREATE TABLE safen_cdr (
+  seq int(11) NOT NULL AUTO_INCREMENT comment '일련번호',
+  conn_sdt datetime NOT NULL DEFAULT '0000-00-00 00:00:00' comment '연결 시작시간',
+  conn_edt datetime NOT NULL DEFAULT '0000-00-00 00:00:00' comment '연결 종료시간',
+  conn_sec int(11) not null default 0 comment '연결시간[초]',
+  service_sdt datetime DEFAULT '0000-00-00 00:00:00' comment '서비스 시작시간',
+  service_edt datetime DEFAULT '0000-00-00 00:00:00' comment '서비스 종료시간',
+  service_sec int(11) not null default 0 comment '서비스시간[초]',
+  safen varchar(20) NOT NULL DEFAULT '' comment '안심번호(0504로시작)',
+  safen_in varchar(20) NOT NULL DEFAULT '' comment '착신지전화번호 예:010###XXXX',
+  safen_out varchar(20) NOT NULL DEFAULT '' comment '발신지전화번호 예:070###XXXX',
+  billsec int(11) NOT NULL DEFAULT 0 comment '통화대기시간[초], (발신음시간 포함) 연결시간 - 통화대기시간 = 서비스시간',
+  unique_id varchar(20) NOT NULL DEFAULT '' comment '고유값',
+  account_cd varchar(20) NOT NULL DEFAULT '' comment '상점전화번호:032###XXXX',
+  calllog_rec_file varchar(255) NOT NULL DEFAULT '' comment '콜로그녹음파일경로',
+  rec_file_cd varchar(1) default '1' comment '녹음파일처리구분 1:신규(미처리)',
+  status_cd varchar(1)  not null default '' comment '통화결과코드 1:통화성공, 2:착신 통화중, 3:착신 무응답, 4:착신측 회선부족, 5:착신번호결번, 6:발/착신자 통화연결오류, B:착신시도중발신측호종료, F:착신번호없음',
+  create_dt datetime comment '생성일',
+  PRIMARY KEY (seq),
+  unique KEY(safen,unique_id)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8 COMMENT='0504안심번호 콜로그';
+
+/* 테이블 생성 end */
