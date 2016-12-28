@@ -1,4 +1,10 @@
+/.settings
+/ToUTF8
+/bin
+/doc
+/logs
 *.sql
 *.tar
 *.txt
 *.lck
+*.class
