@@ -16,7 +16,7 @@ import java.util.Arrays;
  * 2016-10-27 (목) 오전 10:42
  *  - 
  */
-public class Safen_cmd_queue {
+public class Prq_cmd_queue {
 	
 	/**
 	 * safen_cmd_queue 테이블의 데이터를 처리하기 위한 주요한 처리를 수행한다.
@@ -24,67 +24,36 @@ public class Safen_cmd_queue {
 	public static void doMainProcess() {
 		Connection con = DBConn.getConnection();
 
-		String ev_st_dt="";
-		String ev_ed_dt="";
-		String daily_st_dt="";
-		String daily_ed_dt="";
-		String mb_hp="";
-		String eventcode="";
-		String cash="";
-		String ed_type="";
-		String biz_code="";
-		String call_hangup_dt="";
-		String mb_id="";
-		String certi_code="";
-		String st_dt="";
-		String ed_dt="";
-		String moddate="1970-01-01 12:00:00";
-		String accdate="1970-01-01 12:00:00";
-		String str_hangup_time="";
-		String tel="";
-		String pt_stat="";
+
+		String cd_date	="";				
+		String cd_id="";					
+		String cd_port="";				
+		String cd_callerid="";			
+		String cd_calledid="";			
+		String cd_name="";				
+		String cd_tel="";					
+		String cd_hp="";					
+
+		int cd_state=0;					
+		int cd_day_cnt=0;				
+		int cd_day_limit=0;				
+		int cd_device_day_cnt=0;		
+
+
 
 		int eventcnt = 0;
-		int daycnt = 0;
-		int pt_day_cnt = 0;
-		int pt_event_cnt = 0;
-		int usereventindex = 0;
-		int user_event_dt_index = 0;
-		int tcl_seq = 0;
-		int service_sec=0;
-		int hangup_time=0;
 
 		boolean is_hp = false;
-		boolean is_freedailypt = false;
-		boolean is_freeuserpt = false;
-		boolean is_fivept = false;
 
-		boolean is_realcode=false;
-		boolean is_userpt=false;
-		boolean chk_realcode=false;
-		boolean is_answer=false;
-
+		/* 멤버 정보 */
+		String[] member_info		= new String[75];
 		/* 상점 정보 */
-		String[] store_info			= new String[5];
+		String[] store_info			= new String[41];
 		/* 포인트 이벤트 정보 */
 		String[] point_event_info	= new String[7];
 		/* 유저 이벤트 정보 */
 		String[] user_event_info	= new String[3];
 		
-		String status_cd="";
-		String conn_sdt="";
-		String conn_edt="";
-		String service_sdt="";
-		String safen="";
-		String safen_in="";
-		String safen_out="";
-		String calllog_rec_file="";
-
-		String store_name = "";
-		String pre_pay="";
-		String store_seq="";
-		String type="";
-		String str_tcl_seq="";
 
 		if (con != null) {
 			MyDataObject dao = new MyDataObject();
@@ -92,11 +61,32 @@ public class Safen_cmd_queue {
 			MyDataObject dao3 = new MyDataObject();
 			MyDataObject dao4 = new MyDataObject();
 			MyDataObject dao5 = new MyDataObject();
-;
+
 			StringBuilder sb = new StringBuilder();
 			StringBuilder sb_log = new StringBuilder();
-
-			sb.append("select * from prq_cdr order by seq limit 1;");
+			/*
+			mysql> show create table prq_cdr\G
+			*************************** 1. row ***************************
+				   Table: prq_cdr
+			Create Table: CREATE TABLE `prq_cdr` (
+			  `cd_date` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+			  `cd_id` varchar(255) NOT NULL DEFAULT '',
+			  `cd_port` varchar(10) NOT NULL DEFAULT '',
+			  `cd_callerid` varchar(30) NOT NULL DEFAULT '',
+			  `cd_calledid` varchar(30) DEFAULT '',
+			  `cd_state` tinyint(1) DEFAULT '0',
+			  `cd_name` varchar(255) NOT NULL DEFAULT '',
+			  `cd_tel` varchar(30) NOT NULL DEFAULT '',
+			  `cd_hp` varchar(30) NOT NULL DEFAULT '',
+			  `cd_day_cnt` int(11) NOT NULL DEFAULT '0',
+			  `cd_day_limit` int(11) NOT NULL DEFAULT '150',
+			  `cd_device_day_cnt` int(11) NOT NULL DEFAULT '0'
+			) ENGINE=MyISAM DEFAULT CHARSET=utf8
+			1 row in set (0.00 sec)
+			*/
+			sb.append("select * from prq_cdr  ");
+			sb.append("WHERE cd_state=0 ");
+			sb.append("AND cd_callerid LIKE '01%';");
 			
 			try {
 				dao.openPstmt(sb.toString());
@@ -113,73 +103,42 @@ public class Safen_cmd_queue {
 						StringBuilder sb5 = new StringBuilder();
 						String hist_table = DBConn.isExistTableYYYYMM();
 						int resultCnt2 = 0;
-						/*
-						*/
-						/**
-						*   select conn_sdt,service_sdt,conn_edt,status_cd from prq_cdr;
-							
-							public static int set_TB_CALL_LOG(
-							String status_cd 상태코드,
-								po_status
-							String conn_sdt 시작시간, 
-								start_dt
-							String conn_edt 종료시간,
-								end_dt
-							String service_sdt, 반응시간
-								called_hangup_dt
-							String safen 안심번호,
-								virtual_num
-							String safen_in 상점번호,
-								called_num
-							String safen_out 고객번호,
-								caller_num
-							String calllog_rec_file	콜로그 녹음파일(
-								userfield
-							int service_sec	서비스 제공시간(단위 :초)(
-								userfield
-								) 
-						*/
+						/*	String cd_date 날짜정보, */
+						cd_date=dao.rs().getString("cd_date")==null?"":dao.rs().getString("cd_date");
+						
+						/*	String cd_id 아이디  */
+						cd_id=dao.rs().getString("cd_id")==null?"":dao.rs().getString("cd_id");
+						
+						/*	String cd_port 콜로그 포트 */
+						cd_port=dao.rs().getString("cd_port")==null?"":dao.rs().getString("cd_port");
+						
+						/*	String cd_callerid, 수신인 */
+						cd_callerid=dao.rs().getString("cd_callerid")==null?"":dao.rs().getString("cd_callerid");
+						
+						/*	String cd_calledid, 발신인 */
+						cd_calledid=dao.rs().getString("cd_calledid")==null?"":dao.rs().getString("cd_calledid"); 
+						
+						/*	String cd_name, 발신인 */
+						cd_name=dao.rs().getString("cd_name")==null?"":dao.rs().getString("cd_name");
+						
+						/*	String cd_tel, 발신인 */
+						cd_tel=dao.rs().getString("cd_tel")==null?"":dao.rs().getString("cd_tel");
+						
+						/*	String cd_hp, 발신인 */
+						cd_hp=dao.rs().getString("cd_hp")==null?"":dao.rs().getString("cd_hp");
+						
+						/*	Int cd_state 상태코드, */
+						cd_state=dao.rs().getInt("cd_state");
+						
+						/*	Int cd_day_cnt 일별전송, */
+						cd_day_cnt=dao.rs().getInt("cd_day_cnt");
+						
+						/*	Int cd_day_limit 일변제한, */
+						cd_day_limit=dao.rs().getInt("cd_day_limit");
+						
+						/*	Int cd_device_day_cnt 기기 일별제한, */
+						cd_device_day_cnt=dao.rs().getInt("cd_device_day_cnt");
 
-						/*	String status_cd 상태코드, */
-						status_cd=dao.rs().getString("status_cd")==null?"":dao.rs().getString("status_cd");
-						
-						/*	String conn_sdt 시작시간,  */
-						conn_sdt=dao.rs().getString("conn_sdt")==null?"":dao.rs().getString("conn_sdt");
-						
-						/*	String conn_edt 종료시간, */
-						conn_edt=dao.rs().getString("conn_edt")==null?"":dao.rs().getString("conn_edt");
-						
-						/*	String service_sdt, 반응시간 */
-						service_sdt=dao.rs().getString("service_sdt")==null?"":dao.rs().getString("service_sdt");
-						
-						/*	String safen 안심번호, 050 */
-						safen=dao.rs().getString("safen")==null?"":dao.rs().getString("safen");
-						tel=safen;
-
-						/*	String safen_in 상점번호, */
-						safen_in=dao.rs().getString("safen_in")==null?"":dao.rs().getString("safen_in");
-						
-						/*	String calllog_rec_file	콜로그 녹음파일( */
-						safen_out=dao.rs().getString("safen_out")==null?"":dao.rs().getString("safen_out");
-						
-						/*	String status_cd 상태코드, */
-						calllog_rec_file=dao.rs().getString("calllog_rec_file")==null?"":dao.rs().getString("calllog_rec_file");
-						
-						/*	String status_cd 상태코드, */
-						service_sec=dao.rs().getInt("service_sec");
-						
-						/*	String status_cd 상태코드, */
-						call_hangup_dt=dao.rs().getString("service_sdt")==null?"":dao.rs().getString("service_sdt");
-						
-						/*	String status_cd 상태코드, */
-						st_dt=dao.rs().getString("conn_sdt")==null?"":dao.rs().getString("conn_sdt");
-						
-						/*	String status_cd 상태코드, */
-						ed_dt=dao.rs().getString("conn_edt")==null?"":dao.rs().getString("conn_edt");
-						
-						st_dt=chgDatetime(st_dt);
-						ed_dt=chgDatetime(ed_dt);
-						mb_hp=safen_out;
 						
 						is_answer = status_cd.equals("1");
 						/* cashq.TB_CALL_LOG에 세팅합니다. */
@@ -940,42 +899,6 @@ public class Safen_cmd_queue {
 		sb.append("tel=?, ");
 		sb.append("pre_pay=?, ");
 		sb.append("pt_stat=? ");
-
-
-/*
-*************************** 1. row ***************************
-           seq: 945834
-         mb_hp: 01077430009
-         point: 2000
-    store_name: 본사포인트 테스트
-          type:
-   hangup_time: 18
-call_hangup_dt: 2016-07-22 18:13:16
-      biz_code: testsub
-      ev_st_dt: 2014-01-01
-      ev_ed_dt: 2020-08-19
-     eventcode: testsub_1
-         mb_id:
-    certi_code:
-       insdate: 2016-07-22 18:15:20
-         st_dt: 2016-07-22 18:13:05
-         ed_dt: 2016-07-22 18:13:34
-       tcl_seq: 3037187
-     store_seq: 6797
-        status: 1
-       moddate: 2016-08-18 10:16:04
-       accdate: 0000-00-00 00:00:00
-     cashq_seq: NULL
-          memo: NULL
-           tel: NULL
-      cnt_memo: NULL
-       pre_pay: sl
-       pt_stat: pt5
-       ed_type: fivept
-1 row in set (0.00 sec)
-
-
-*/
 		try {
 			dao.openPstmt(sb.toString());
 			dao.pstmt().setString(1, mb_hp);
@@ -1729,4 +1652,47 @@ call_hangup_dt: 2016-07-22 18:13:16
 		return retVal;
 	}
 
+    @Override
+    public ArrayList<Object> getCdr() {
+        ArrayList<Object> cdr = new ArrayList<Object>();
+        try {
+            Statement stmt = myConnection.createStatement();
+            ResultSet result = stmt.executeQuery("select * from prq_cdr  WHERE cd_state=0 AND cd_callerid LIKE '01%';");
+			/*
+			mysql> show create table prq_cdr\G
+			*************************** 1. row ***************************
+				   Table: prq_cdr
+			Create Table: CREATE TABLE `prq_cdr` (
+			  `cd_date` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+			  `cd_id` varchar(255) NOT NULL DEFAULT '',
+			  `cd_port` varchar(10) NOT NULL DEFAULT '',
+			  `cd_callerid` varchar(30) NOT NULL DEFAULT '',
+			  `cd_calledid` varchar(30) DEFAULT '',
+			  `cd_state` tinyint(1) DEFAULT '0',
+			  `cd_name` varchar(255) NOT NULL DEFAULT '',
+			  `cd_tel` varchar(30) NOT NULL DEFAULT '',
+			  `cd_hp` varchar(30) NOT NULL DEFAULT '',
+			  `cd_day_cnt` int(11) NOT NULL DEFAULT '0',
+			  `cd_day_limit` int(11) NOT NULL DEFAULT '150',
+			  `cd_device_day_cnt` int(11) NOT NULL DEFAULT '0'
+			) ENGINE=MyISAM DEFAULT CHARSET=utf8
+			1 row in set (0.00 sec)
+			*/
+			while(result.next()){
+
+                cdr.add(result.getString(1));
+                cdr.add(result.getString(2));
+                cdr.add(result.getString(3));
+                cdr.add(result.getString(4));
+                cdr.add(result.getString(5));
+                cdr.add(new Integer(result.getInt(6)));
+                cdr.add(result.getString(7));
+                cdr.add(new Integer(result.getInt(3)));
+                cdr.add(result.getDouble(4));
+                }
+        }catch (SQLException e){
+                 System.out.println(e.getMessage());
+           }
+        return expenses;
+    }
 }

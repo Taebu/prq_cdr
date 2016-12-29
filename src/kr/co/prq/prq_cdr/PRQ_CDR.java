@@ -235,7 +235,7 @@ public class PRQ_CDR {
 			return false;
 		} else {
 			// /여기서 DB를 읽어서 작업한다.
-			Safen_cmd_queue.doMainProcess();
+			Prq_cmd_queue.doMainProcess();
 			return true;
 		}
 	}
