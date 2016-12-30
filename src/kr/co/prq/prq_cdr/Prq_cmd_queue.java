@@ -1652,47 +1652,81 @@ public class Prq_cmd_queue {
 		return retVal;
 	}
 
-    @Override
-    public ArrayList<Object> getCdr() {
-        ArrayList<Object> cdr = new ArrayList<Object>();
-        try {
-            Statement stmt = myConnection.createStatement();
-            ResultSet result = stmt.executeQuery("select * from prq_cdr  WHERE cd_state=0 AND cd_callerid LIKE '01%';");
-			/*
-			mysql> show create table prq_cdr\G
-			*************************** 1. row ***************************
-				   Table: prq_cdr
-			Create Table: CREATE TABLE `prq_cdr` (
-			  `cd_date` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
-			  `cd_id` varchar(255) NOT NULL DEFAULT '',
-			  `cd_port` varchar(10) NOT NULL DEFAULT '',
-			  `cd_callerid` varchar(30) NOT NULL DEFAULT '',
-			  `cd_calledid` varchar(30) DEFAULT '',
-			  `cd_state` tinyint(1) DEFAULT '0',
-			  `cd_name` varchar(255) NOT NULL DEFAULT '',
-			  `cd_tel` varchar(30) NOT NULL DEFAULT '',
-			  `cd_hp` varchar(30) NOT NULL DEFAULT '',
-			  `cd_day_cnt` int(11) NOT NULL DEFAULT '0',
-			  `cd_day_limit` int(11) NOT NULL DEFAULT '150',
-			  `cd_device_day_cnt` int(11) NOT NULL DEFAULT '0'
-			) ENGINE=MyISAM DEFAULT CHARSET=utf8
-			1 row in set (0.00 sec)
-			*/
-			while(result.next()){
 
-                cdr.add(result.getString(1));
-                cdr.add(result.getString(2));
-                cdr.add(result.getString(3));
-                cdr.add(result.getString(4));
-                cdr.add(result.getString(5));
-                cdr.add(new Integer(result.getInt(6)));
-                cdr.add(result.getString(7));
-                cdr.add(new Integer(result.getInt(3)));
-                cdr.add(result.getDouble(4));
-                }
-        }catch (SQLException e){
-                 System.out.println(e.getMessage());
-           }
-        return expenses;
-    }
+	/**
+	 * 콜 리스트 가져오기
+	 * @author Taebu Moon <mtaebu@gmail.com>
+	 * @return ArrayList<HashMap<String, String>>
+	 * @return list
+	 */
+    @Override
+	public static ArrayList<HashMap<String, String>> getCdr() {
+		ArrayList<HashMap<String,String>> list = new ArrayList<HashMap<String,String>>();
+		String sql="";
+					
+		MyDataObject dao = new MyDataObject();
+		MyDataObject dao2 = new MyDataObject();
+		MyDataObject dao3 = new MyDataObject();
+
+		sql="select * from prq_cdr  "+
+		"WHERE cd_state=0 "+
+		"AND cd_callerid LIKE '01%';";
+
+		try {
+			dao.openPstmt(sql);
+			//dao.pstmt().setString(1, mb_hp);
+			dao.setRs(dao.pstmt().executeQuery());
+			while (dao.next()) 
+			{
+				HashMap<String,String> map = new HashMap<String,String>();
+				map.put("cd_date",dao.rs().getString("cd_date"));
+				map.put("cd_id",dao.rs().getString("cd_id"));
+				map.put("cd_port",dao.rs().getString("cd_port"));
+				map.put("cd_callerid",dao.rs().getString("cd_callerid"));
+				map.put("cd_calledid",dao.rs().getString("cd_calledid"));
+				map.put("cd_state",dao.rs().getString("cd_state"));
+				map.put("cd_name",dao.rs().getString("cd_name"));
+				map.put("cd_tel",dao.rs().getString("cd_tel"));
+				map.put("cd_hp",dao.rs().getString("cd_hp"));
+				map.put("cd_day_cnt",dao.rs().getString("cd_day_cnt"));
+				map.put("cd_day_limit",dao.rs().getString("cd_day_limit"));
+				map.put("cd_device_day_cnt", dao.rs().getString("cd_device_day_cnt"));
+				list.add(map);
+			}
+			
+			/*처리한 번호 핸드폰 발송 처리 */
+			sql="UPDATE prq_cdr SET cd_state=1 "+
+			"WHERE cd_state=0 "+
+			"and cd_callerid like '01%';";
+			dao2.openPstmt(sql);
+			dao2.pstmt().executeUpdate();
+
+			/*처리한 번호 일반 번호  미발송  처리 cd_state=2 */
+			sql="UPDATE prq_cdr SET cd_state=2 "+
+			"WHERE cd_state=0 "+
+			"and cd_callerid not like '01%';";
+			dao3.openPstmt(sql);
+			dao3.pstmt().executeUpdate();
+			
+
+		} catch (SQLException e) {
+			Utils.getLogger().warning(e.getMessage());
+			DBConn.latest_warning = "ErrPOS039";
+			e.printStackTrace();
+		}
+		catch (Exception e) {
+			Utils.getLogger().warning(e.getMessage());
+			Utils.getLogger().warning(Utils.stack(e));
+			DBConn.latest_warning = "ErrPOS040";
+		}
+		finally {
+			dao.closePstmt();
+			dao2.closePstmt();
+			dao3.closePstmt();
+		}
+
+		return list;
+	}
+
+	select bl_hp from `callerid`.black_hp where bl_dnis='0801308119';
 }
