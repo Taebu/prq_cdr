@@ -163,7 +163,9 @@ public class DBConn {
 
 		boolean exi = false;
 
-		sb.append("select exists(SELECT 1 FROM information_schema.tables WHERE table_schema= '").append(CON_DBNM).append("' AND table_name = ?) a");
+		sb.append("select exists(SELECT 1 FROM information_schema.tables WHERE table_schema= '");
+		sb.append(CON_DBNM);
+		sb.append("' AND table_name = ?) a");
 
 		MyDataObject dao = new MyDataObject();
 		try {
