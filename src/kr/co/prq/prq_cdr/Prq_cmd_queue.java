@@ -56,6 +56,7 @@ public class Prq_cmd_queue {
 		String st_middle_msg="";
 		String st_bottom_msg="";
 		String st_modoo_url="";
+		String is_blogon="off";
 
 		int cd_state=0;					
 		int cd_day_cnt=0;				
@@ -314,8 +315,20 @@ public class Prq_cmd_queue {
 					}
 					//$mms_title=strlen($st->st_top_msg)>3?$st->st_top_msg:"web";
 					// mms_title=store_info[6];
+					
+					is_blogon=get_blog_yn(st_no);
+					
+					if(is_blogon.equals("on"))
+					{
+						msg.add("");
+						msg.add("리뷰 이벤트 (2,000원 지급)");
+						msg.add("http://prq.co.kr/prq/blog/write/"+st_no);
+					}
+					
 					msg.add(store_info[6]);
+					
 					msg.add(st_bottom_msg);
+					
 					msg.add(st_modoo_url);
 					/*
 					$param=ARRAY();
@@ -323,13 +336,10 @@ public class Prq_cmd_queue {
 					$param['return_type']='';
 					*/
 					if(st_mno.equals("LG")){
-					
 						message=String.join("\r\n", msg);
-					
 					}else if(st_mno.equals("KT")){
 					//msg=join("<br>",$msg);
 						message=String.join("<br>", msg);
-
 					}else if(st_mno.equals("SK")){
 					//msg=join("\r\n",$msg);
 						message=String.join("\r\n", msg);
@@ -572,76 +582,6 @@ public class Prq_cmd_queue {
 
 	
 	/**
-	 * cdr 에 추가한다.
-	 * @param String status_cd	콜로그 상태 코드
-	 * @param String conn_sdt	콜로그 시작시간
-	 * @param String conn_edt	콜로그 종료시간
-	 * @param String service_sdt	콜로그 제공시간
-	 * @param String safen	
-	 * @param String safen_in
-	 * @param String safen_out
-	 * @param String calllog_rec_file
-	 * @return
-	 */
-	public static int set_cdr(String status_cd, 
-		String conn_sdt, String conn_edt,String service_sdt,
-		String safen,String safen_in,String safen_out,
-		String calllog_rec_file) 
-	{
-		boolean retVal = false;
-		int last_id = 0;
-		StringBuilder sb = new StringBuilder();
-		MyDataObject dao = new MyDataObject();
-		sb.append("INSERT INTO `asteriskcdrdb`.`cdr` SET ");
-		sb.append("calldate=?,");
-		sb.append("src=?,");
-		sb.append("dst=?,");
-		sb.append("duration=?,");
-		sb.append("billsec=?,");
-		sb.append("accountcode=?,");
-		sb.append("uniqueid=?,");
-		sb.append("userfield=?;");
-		//Utils.getLogger().warning(sb.toString());
-
-
-		/*
-		sb.append("insert into cashq.site_push_log set "
-				+ "stype='SMS', biz_code='ANP', caller=?, called=?, wr_subject=?, regdate=now(), result=''");
-		*/
-		try {
-			dao.openPstmt(sb.toString());
-
-			dao.pstmt().setString(1, dao.rs().getString("conn_sdt"));
-			dao.pstmt().setString(2, dao.rs().getString("safen_in"));
-			dao.pstmt().setString(3, dao.rs().getString("safen"));
-			dao.pstmt().setString(4, dao.rs().getString("conn_sec"));
-			dao.pstmt().setString(5, dao.rs().getString("service_sec"));
-			dao.pstmt().setString(6, dao.rs().getString("safen_out"));
-			dao.pstmt().setString(7, dao.rs().getString("unique_id"));
-			dao.pstmt().setString(8, dao.rs().getString("rec_file_cd"));
-
-			dao.pstmt().executeUpdate();
-			retVal = true;
-		} catch (SQLException e) {
-			Utils.getLogger().warning(e.getMessage());
-			Utils.getLogger().warning(Utils.stack(e));
-			DBConn.latest_warning = "ErrPOS060";
-			/* grant로 해당 사용자에 대한 권한을 주어 문제 해결이 가능하다.
-			grant all privileges on cashq.site_push_log to sktl@"%" identified by 'sktl@9495';
-			grant all privileges on cashq.site_push_log to sktl@"localhost" identified by 'sktl@9495';
-			 */
-		} catch (Exception e) {
-			Utils.getLogger().warning(e.getMessage());
-			Utils.getLogger().warning(Utils.stack(e));
-			DBConn.latest_warning = "ErrPOS061";
-		} finally {
-			dao.closePstmt();
-		}
-		//return retVal;
-		return last_id;
-	}
-
-	/**
 	 * 콜 리스트 가져오기
 	 * getCdr()
 	 * @author Taebu Moon <mtaebu@gmail.com>
@@ -870,7 +810,7 @@ public class Prq_cmd_queue {
 			dao.pstmt().setString(1, mb_hp);
 			
 			dao.setRs (dao.pstmt().executeQuery());
-
+			
 			if (dao.rs().next()) {
 				retVal = dao.rs().getInt("cnt");
 			}			
@@ -890,13 +830,13 @@ public class Prq_cmd_queue {
 		return retVal;
 	}
 	
-	/**
+	/**************************************
 	 * get_mms_daily
 	 * mms 디바이스 발송 갯수 가져오기
 	 * @author Taebu  Moon <mtaebu@gmail.com>
 	 * @param st_hp 상점 핸드폰 번호
 	 * @return int
-	 */
+	 **************************************/
 	private static int get_mms_daily(String st_hp)
     {
 		int retVal = 0;
@@ -905,7 +845,7 @@ public class Prq_cmd_queue {
 		MyDataObject dao = new MyDataObject();
 		sb.append("SELECT ");
 		sb.append(" mm_daily_cnt ");
-		sb.append(" FROM ");
+		sb.append("FROM ");
 		sb.append(" prq_mms_log ");
 		sb.append(" WHERE ");
 		sb.append(" mm_sender=? ");
@@ -1258,5 +1198,49 @@ public class Prq_cmd_queue {
 		}
 		return String.join(",", msg);
 	}
- 	
+
+	/**
+	 * 블로그 url on/off 사용 여부
+	 *
+	 * @author Taebu Moon <mtaebu@gmail.com>
+	 * @param string $st_no  상점아이디
+	 * @return array
+	 */
+ 	private static String get_blog_yn(String st_no)
+    {
+
+		String sql="";
+		String retVal="";
+		MyDataObject dao = new MyDataObject();		
+		sql="select ";
+		sql+="pv_value ";
+		sql+="from ";
+		sql+="prq_values ";
+		sql+="where ";
+		sql+="pv_code='5002' ";
+		sql+="and pv_no='"+st_no+"';";
+
+		try {
+			dao.openPstmt(sql);
+			dao.setRs(dao.pstmt().executeQuery());
+			if(dao.rs().wasNull()){
+				retVal="off";
+			}else if(dao.rs().next()){
+				retVal=dao.rs().getString("pv_value");
+			}
+		} catch (SQLException e) {
+			Utils.getLogger().warning(e.getMessage());
+			DBConn.latest_warning = "ErrPOS039";
+			e.printStackTrace();
+		}
+		catch (Exception e) {
+			Utils.getLogger().warning(e.getMessage());
+			Utils.getLogger().warning(Utils.stack(e));
+			DBConn.latest_warning = "ErrPOS040";
+		}
+		finally {
+			dao.closePstmt();
+		}
+		return retVal;
+    }
  }
