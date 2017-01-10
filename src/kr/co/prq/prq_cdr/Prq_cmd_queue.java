@@ -1,10 +1,14 @@
 package kr.co.prq.prq_cdr;
 
+import java.io.OutputStream;
+import java.io.PrintWriter;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
-
-import com.mysql.jdbc.Connection;
+import java.util.List;
 
 //import com.nostech.safen.SafeNo;
 
@@ -21,7 +25,7 @@ public class Prq_cmd_queue {
 	 */
 	public static void doMainProcess() {
 		Connection con = DBConn.getConnection();
-
+		
 		String cd_date	="";				
 		String cd_id="";					
 		String cd_port="";				
@@ -32,6 +36,12 @@ public class Prq_cmd_queue {
 		String cd_hp="";					
 		String last_cdr="";
 		String chk_limit_date="";
+		String message="";
+		
+		String result_msg="";
+		String mms_title="";
+		String img_url="";
+		String gc_ipaddr="";
 		
 		/* 상점 정보*/
 		String st_no="";
@@ -56,14 +66,23 @@ public class Prq_cmd_queue {
 		int mn_mms_limit=0;
 		int mn_dup_limit=0;
 		int chk_cd_date=0;
-						
-		int eventcnt = 0;
 		
+				
+		int eventcnt = 0;
+		int daily_mms_cnt=0;
+		String mm_daily_cnt="";
 		String[] mno_limit = new String[2];
 		
 		boolean is_hp = false;
 		boolean chk_mms = true;
-
+		String black_list="";
+		/****************************************************************************** 
+		* 1. 블랙 리스트 가져오기 
+		* 
+		******************************************************************************/
+		black_list=get_black();
+		Utils.getLogger().info(black_list);
+		
 		/* 멤버 정보 */
 		String[] member_info		= new String[75];
 		/* 상점 정보 */
@@ -86,6 +105,10 @@ public class Prq_cmd_queue {
 
 			StringBuilder sb = new StringBuilder();
 			StringBuilder sb_log = new StringBuilder();
+			StringBuilder sb2 = new StringBuilder();
+			StringBuilder sb3 = new StringBuilder();
+			StringBuilder sb4 = new StringBuilder();
+			StringBuilder sb5 = new StringBuilder();
 
 			sb.append("select * from prq_cdr  ");
 			sb.append("WHERE cd_state=0 ");
@@ -95,20 +118,17 @@ public class Prq_cmd_queue {
 				dao.openPstmt(sb.toString());
 
 				dao.setRs(dao.pstmt().executeQuery());
-
-				if (dao.rs().next()) 
+				/*****************************************************
+				* 2-2. 리스트 출력 
+				* SELECT TIMESTAMPDIFF(DAY,'2009-05-18','2009-07-29');
+				***************************************************/
+				while(dao.rs().next()) 
 				{
 					
 					PRQ_CDR.heart_beat = 1;
-					StringBuilder sb2 = new StringBuilder();
-					StringBuilder sb5 = new StringBuilder();
 					String hist_table = DBConn.isExistTableYYYYMM();
 					int resultCnt2 = 0;
 					
-					/*****************************************************
-					* 2-2. 리스트 출력 
-					* SELECT TIMESTAMPDIFF(DAY,'2009-05-18','2009-07-29');
-					***************************************************/
 					/*	String cd_date 날짜정보, */
 					cd_date=chkValue(dao.rs().getString("cd_date"));
 					
@@ -230,262 +250,305 @@ public class Prq_cmd_queue {
 						store_info=get_store(config);
 						//store_info[5];
 					}
+				}
+				
+				
+				
+				/* 콜로그가 KT 장비 인 경우*/
+				if(!store_info[0].equals(null))
+				{
+					/**
+					 * store_info[0]=st_no;
+					 * store_info[1]=st_name;
+					 * store_info[2]=st_mno;
+					 * store_info[3]=st_tel_1;
+					 * store_info[4]=st_hp_1;
+					 * store_info[5]=st_thumb_paper;
+					 * store_info[6]=st_top_msg;
+					 * store_info[7]=st_middle_msg;
+					 * store_info[8]=st_bottom_msg;
+					 * store_info[9]=st_modoo_url;
+					 * */
 					
-					/* 콜로그가 KT 장비 인 경우*/
-					if(!store_info[0].equals(null))
+					st_hp=store_info[4];
+					if(cd_port.equals("0"))
 					{
-						/**
-						 * store_info[0]=st_no;
-						 * store_info[1]=st_name;
-						 * store_info[2]=st_mno;
-						 * store_info[3]=st_tel_1;
-						 * store_info[4]=st_hp_1;
-						 * store_info[5]=st_thumb_paper;
-						 * store_info[6]=st_top_msg;
-						 * store_info[7]=st_middle_msg;
-						 * store_info[8]=st_bottom_msg;
-						 * store_info[9]=st_modoo_url;
-						 * */
+						/********************************************************************************
+						* 8. void set_cdr_kt 
+						* - KT_CID 포트 구분이 없다.
+						* - PRQ_CID 역시 포트 구분이 없다.
+						* - 개발 당시 한번의 핸드폰 건만 하루 전송하고 이외에 콜은 인정하지 않는다.
+						* - cdr kt 세팅
+						********************************************************************************/
+						cdr_info[0]=cd_date;
+						cdr_info[1]=cd_callerid;
+						cdr_info[2]=cd_calledid;
+						cdr_info[3]=store_info[1];
+						cdr_info[4]=store_info[3];
+						cdr_info[5]=store_info[4];
+						//페이지네이션 기본 설정
 						
-						st_hp=store_info[4];
+						set_cdr_kt(cdr_info);
+						//$li->cd_hp=$st->st_hp_1;
+						cd_hp=store_info[4];
+					}/* if($li->cd_port=="0"){...} */
+					
+
+					/*mms 발송 여부*/
+					chk_mms=true;
+					
+					//StringBuilder msg= new StringBuilder();
+					
+					/* 1.8 버전 가능 */
+					List<String> msg = new ArrayList<String>();
+
+					// "foo and bar and baz"
+					if(st_mno.equals("LG")){
+						//$msg[]=str_replace(array("\r\n", "\r",'<br />','<br>'), '\n', $st->st_middle_msg);
+						msg.add(st_middle_msg);
+					}else if(st_mno.equals("KT")){
+						msg.add(st_middle_msg.replaceAll("(\\r|\\n)","<br>"));		
+					}else if(st_mno.equals("SK")){
+						// SK 는 아무것도 하지 않는다
+						msg.add(st_middle_msg);
+					}
+					//$mms_title=strlen($st->st_top_msg)>3?$st->st_top_msg:"web";
+					// mms_title=store_info[6];
+					msg.add(store_info[6]);
+					msg.add(st_bottom_msg);
+					msg.add(st_modoo_url);
+					/*
+					$param=ARRAY();
+					$param['url']="http://prq.co.kr/prq/set_gcm.php";
+					$param['return_type']='';
+					*/
+					if(st_mno.equals("LG")){
+					
+						message=String.join("\r\n", msg);
+					
+					}else if(st_mno.equals("KT")){
+					//msg=join("<br>",$msg);
+						message=String.join("<br>", msg);
+
+					}else if(st_mno.equals("SK")){
+					//msg=join("\r\n",$msg);
+						message=String.join("\r\n", msg);
+					}
+
+					//msg=str_replace("#{homepage}","http://prq.co.kr/prq/page/".st_no,$msg);
+					message=message.replaceAll("#{homepage}","http://prq.co.kr/prq/page/"+store_info[0]);
+					//msg=str_replace("#{st_tel}",phone_format(st_tel_1),$msg);
+					message=message.replaceAll("#{st_tel}","http://prq.co.kr/prq/page/"+store_info[3]);
+					//echo $msg;
+					
+
+					/********************************************************************************
+					* 9. void set_gcm_log
+					* - gcm 로그에 따라 prq DB에 gcm_log 발생
+					*
+					********************************************************************************/
+					img_url="http://prq.co.kr/prq/uploads/TH/"+st_thumb_paper;
+					//수신거부 여부 체크
+//					if(in_array(cd_callerid,black_arr))
+					
+					if(black_list.contains(cd_callerid))
+					{
+						/*gcm 로그 발생*/
+						result_msg= "수신거부";
+						//gc_ipaddr='123.142.52.91';
+						
+
 						if(cd_port.equals("0"))
 						{
-							/********************************************************************************
-							* 8. void set_cdr_kt 
-							* - KT_CID 포트 구분이 없다.
-							* - PRQ_CID 역시 포트 구분이 없다.
-							* - 개발 당시 한번의 핸드폰 건만 하루 전송하고 이외에 콜은 인정하지 않는다.
-							* - cdr kt 세팅
-							********************************************************************************/
-							cdr_info[0]=cd_date;
-							cdr_info[1]=cd_callerid;
-							cdr_info[2]=cd_calledid;
-							cdr_info[3]=store_info[1];
-							cdr_info[4]=store_info[3];
-							cdr_info[5]=store_info[4];
-							//페이지네이션 기본 설정
-							
-							set_cdr_kt(cdr_info);
 							//$li->cd_hp=$st->st_hp_1;
-							cd_hp=store_info[4];
-						}/* if($li->cd_port=="0"){...} */
+							cd_hp= store_info[4];
+						}
 						
+						sb2.append("INSERT INTO `prq_gcm_log` SET ");
+						sb2.append("gc_subject='"+mms_title+"',");
+						sb2.append("gc_content='"+message+"',");
+						sb2.append("gc_ismms='true',");
+						sb2.append("gc_receiver='"+cd_callerid+"',");
+						sb2.append("gc_sender='"+cd_hp+"',");
+						sb2.append("gc_imgurl='"+img_url+"',");
+						sb2.append("gc_result='"+result_msg+"',");
+						sb2.append("gc_ipaddr='"+gc_ipaddr+"',");
+						sb2.append("gc_stno='"+st_no+"',");
+						sb2.append("gc_datetime=now();");
+						dao2.openPstmt(sb2.toString());
 
-						/*mms 발송 여부*/
+						dao2.pstmt().executeUpdate();
+						
+						
+						chk_mms=false;
+					}
+
+
+					
+					/* 일간 mms 발송건 초기값 */
+					daily_mms_cnt=0;
+					/* 일간 mms 발송건 디바이스 값 */
+					daily_mms_cnt+=Integer.parseInt(mm_daily_cnt);
+					/* 일간 mms 발송건 prq 값 */
+					daily_mms_cnt+=cd_day_cnt;
+					
+					/********************************************************************************
+					*
+					* 9-1. if($cd_date=="first_send"){...}
+					* - 처음 보낼 때 안보내지던 버그 수정
+					* - $chk_mms = true;
+					*********************************************************************************/
+					if(cd_date.equals("first_sent")){
+						/*gcm 로그 발생*/
+						result_msg= "처음 발송 / "+mn_dup_limit;
+						//gc_ipaddr='123.142.52.90';
+						
+						if(cd_port.equals(0))
+						{
+							cd_hp=st_hp_1;
+						}
+						
 						chk_mms=true;
+					
+					/********************************************************************************
+					* 9-2. void set_gcm_log
+					* 중복 제한 보내면 안됨 
+					* prq_gcm_log 중복제한 로그 발생
+					********************************************************************************/
+					}else if(mn_dup_limit>Integer.parseInt(cd_date)){
+						/*gcm 로그 발생*/
+						/* 2016-11-22 (화)
+						* https://github.com/Taebu/prq/issues/57
+						* 조정흠씨 자체 개발로 인해 중복 제한 비활성화
+						*/
+
+						//$result_msg= $cd_date."/".$get_mno_limit->mn_dup_limit."일 중복 제한";
+						result_msg= cd_date+"/"+mn_dup_limit+"일 발송";
+						//gc_ipaddr='123.142.52.90';
 						
-						StringBuilder msg= new StringBuilder();
-						msg.append(st_top_msg);
-						if(st_mno.equals("LG")){
-							//$msg[]=str_replace(array("\r\n", "\r",'<br />','<br>'), '\n', $st->st_middle_msg);
-							msg.append(st_middle_msg);
-						}else if(st_mno.equals("KT")){
-							msg.append(st_middle_msg.replaceAll("(\\r|\\n)","<br>"));		
-						}else if(st_mno.equals("SK")){
-							// SK 는 아무것도 하지 않는다
-							msg.append(st_middle_msg);
+						if(cd_port.equals(0))
+						{
+							cd_hp=st_hp_1;
 						}
-						//$mms_title=strlen($st->st_top_msg)>3?$st->st_top_msg:"web";
-						mms_title=st_top_msg;
-						msg.append(st_bottom_msg);
-						msg.append(st_modoo_url);
+
+						sb3.append("INSERT INTO `prq_gcm_log` SET ");
+						sb3.append("gc_subject='"+mms_title+"',");
+						sb3.append("gc_content='"+message+"',");
+						sb3.append("gc_ismms='true',");
+						sb3.append("gc_receiver='"+cd_callerid+"',");
+						sb3.append("gc_sender='"+cd_hp+"',");
+						sb3.append("gc_imgurl='"+img_url+"',");
+						sb3.append("gc_result='"+result_msg+"',");
+						sb3.append("gc_ipaddr='"+gc_ipaddr+"',");
+						sb3.append("gc_stno='"+st_no+"',");
+						sb3.append("gc_datetime=now();");
+						dao3.openPstmt(sb3.toString());
+
+						dao3.pstmt().executeUpdate();
+						/* 2016-11-22 (화)
+						* https://github.com/Taebu/prq/issues/57
+						* 조정흠씨 자체 개발로 인해 중복 제한 비활성화
+						*/
+						//$chk_mms=false;
+					/********************************************************************************
+					* 9-3. void set_gcm_log
+					* 150건 제한
+					* prq_gcm_log 150건 제한 로그 발생
+					********************************************************************************/
+					}else if(daily_mms_cnt>mn_mms_limit){
+						/*gcm 로그 발생*/
+						result_msg= cd_day_cnt+"/"+mn_mms_limit+"건 제한";
+						//gc_ipaddr='123.142.52.90';
+						
+						if(cd_port.equals(0))
+						{
+							cd_hp=st_hp_1;
+						}
+
+						sb4.append("INSERT INTO `prq_gcm_log` SET ");
+						sb4.append("gc_subject='"+mms_title+"',");
+						sb4.append("gc_content='"+message+"',");
+						sb4.append("gc_ismms='true',");
+						sb4.append("gc_receiver='"+cd_callerid+"',");
+						sb4.append("gc_sender='"+cd_hp+"',");
+						sb4.append("gc_imgurl='"+img_url+"',");
+						sb4.append("gc_result='"+result_msg+"',");
+						sb4.append("gc_ipaddr='"+gc_ipaddr+"',");
+						sb4.append("gc_stno='"+st_no+"',");
+						sb4.append("gc_datetime=now();");
+						dao4.openPstmt(sb4.toString());
+
+						dao4.pstmt().executeUpdate();
+						chk_mms=false;
+					}		
+
+
+					
+					/********************************************************************************
+					*
+					* 9-4. curl->simple_post('http://prq.co.kr/prq/set_gcm.php')
+					* - 수신거부 중복, 150건 제한 혹은 설정한 일수 제한 아닌 경우만
+					* - $chk_mms = true;
+					*********************************************************************************/
+					if(chk_mms)
+					{
+						/********************************************************************************
+						* 10. void set_gcm
+						* - curl 전송
+						********************************************************************************/
 						/*
-						$param=ARRAY();
-						$param['url']="http://prq.co.kr/prq/set_gcm.php";
-						$param['return_type']='';
+						$config=array(
+							'is_mms'=>'true',
+							'message'=>$msg,
+							'st_no'=>$st->st_no,
+							'title'=>$mms_title,
+							'receiver_num'=>$li->cd_callerid,
+							'phone'=>$li->cd_hp,
+							'img_url'=>"http://prq.co.kr/prq/uploads/TH/".$st->st_thumb_paper,
+							'mode'=>'cront+'
+						);
 						*/
-						if(st_mno.equals("LG")){
-						msg=join("\r\n",$msg);
-						}else if(st_mno.equals("KT")){
-						msg=join("<br>",$msg);
-						}else if(st_mno.equals("SK")){
-						msg=join("\r\n",$msg);
-						}
-
+						String query="";
+						query="is_mms=true";
+						query+="&message="+msg.toString();
+						query+="&st_no="+st_no;
+						query+="&title="+mms_title;
+						query+="&receiver_num="+cd_callerid;
+						query+="&phone="+cd_hp;
+						query+="&img_url=http://prq.co.kr/prq/uploads/TH/"+st_thumb_paper;
+						query+="&mode=crontab";
 						
-						msg=str_replace("#{homepage}","http://prq.co.kr/prq/page/".st_no,$msg);
-						msg=str_replace("#{st_tel}",phone_format(st_tel_1),$msg);
-						//echo $msg;
-
-						/********************************************************************************
-						* 9. void set_gcm_log
-						* - gcm 로그에 따라 prq DB에 gcm_log 발생
-						*
-						********************************************************************************/
-						img_url="http://prq.co.kr/prq/uploads/TH/"+st_thumb_paper;
-						//수신거부 여부 체크
-						if(in_array(cd_callerid,black_arr))
-						{
-							/*gcm 로그 발생*/
-							result_msg= "수신거부";
-							gc_ipaddr='123.142.52.91';
-							sql=array();
-
-							if(cd_port.equals("0"))
-							{
-								$li->cd_hp=$st->st_hp_1;
-							}
-							$sql[]="INSERT INTO `prq_gcm_log` SET ";
-							$sql[]="gc_subject='".$mms_title."',";
-							$sql[]="gc_content='".$msg."',";
-							$sql[]="gc_ismms='true',";
-							$sql[]="gc_receiver='".$li->cd_callerid."',";
-							$sql[]="gc_sender='".$li->cd_hp."',";
-							$sql[]="gc_imgurl='".$img_url."',";
-							$sql[]="gc_result='".$result_msg."',";
-							$sql[]="gc_ipaddr='".$gc_ipaddr."',";
-							$sql[]="gc_stno='".$st->st_no."',";
-							$sql[]="gc_datetime=now();";
-							echo join("",$sql);
-							mysql_query(join("",$sql));
-							$chk_mms=false;
-						}
-
-
-
-						/* 일간 mms 발송건 초기값 */
-						$daily_mms_cnt=0;
-						/* 일간 mms 발송건 디바이스 값 */
-						$daily_mms_cnt+=$mno_device_daily->mm_daily_cnt;
-						/* 일간 mms 발송건 prq 값 */
-						$daily_mms_cnt+=$li->cd_day_cnt;
+						//$curl=$controller->curl->simple_post('http://prq.co.kr/prq/set_gcm.php', $config, array(CURLOPT_BUFFERSIZE => 10)); 
+						//echo $curl;
 						
-						/********************************************************************************
-						*
-						* 9-1. if($cd_date=="first_send"){...}
-						* - 처음 보낼 때 안보내지던 버그 수정
-						* - $chk_mms = true;
-						*********************************************************************************/
-						if($cd_date=="first_sent"){
-							/*gcm 로그 발생*/
-							$result_msg= "처음 발송 / ".$get_mno_limit->mn_dup_limit;
-							$gc_ipaddr='123.142.52.90';
-							$sql=array();
-							if($li->cd_port==0)
-							{
-								$li->cd_hp=$st->st_hp_1;
-							}
-							
-							$chk_mms=true;
+
+						HttpURLConnection cons = (HttpURLConnection) new URL("http://prq.co.kr/prq/set_gcm.php").openConnection();
+						cons.setRequestMethod("POST");
+						//cons.getOutputStream().write("LOGIN".getBytes("UTF-8"));
+						cons.setDoOutput(true);
+						cons.setDoInput(true);
+						cons.setUseCaches(false);
+						cons.setDefaultUseCaches(false);
 						
-						/********************************************************************************
-						* 9-2. void set_gcm_log
-						* 중복 제한 보내면 안됨 
-						* prq_gcm_log 중복제한 로그 발생
-						********************************************************************************/
-						}else if($get_mno_limit->mn_dup_limit>$cd_date){
-							/*gcm 로그 발생*/
-							/* 2016-11-22 (화)
-							* https://github.com/Taebu/prq/issues/57
-							* 조정흠씨 자체 개발로 인해 중복 제한 비활성화
-							*/
-
-							//$result_msg= $cd_date."/".$get_mno_limit->mn_dup_limit."일 중복 제한";
-							$result_msg= $cd_date."/".$get_mno_limit->mn_dup_limit."일 발송";
-							$gc_ipaddr='123.142.52.90';
-							$sql=array();
-							if($li->cd_port==0)
-							{
-								$li->cd_hp=$st->st_hp_1;
-							}
-
-							$sql[]="INSERT INTO `prq_gcm_log` SET ";
-							$sql[]="gc_subject='".$mms_title."',";
-							$sql[]="gc_content='".$msg."',";
-							$sql[]="gc_ismms='true',";
-							$sql[]="gc_receiver='".$li->cd_callerid."',";
-							$sql[]="gc_sender='".$li->cd_hp."',";
-							$sql[]="gc_imgurl='".$img_url."',";
-							$sql[]="gc_result='".$result_msg."',";
-							$sql[]="gc_ipaddr='".$gc_ipaddr."',";
-							$sql[]="gc_stno='".$st->st_no."',";
-							$sql[]="gc_datetime=now();";
-							mysql_query(join("",$sql));
-							/* 2016-11-22 (화)
-							* https://github.com/Taebu/prq/issues/57
-							* 조정흠씨 자체 개발로 인해 중복 제한 비활성화
-							*/
-							//$chk_mms=false;
-						/********************************************************************************
-						* 9-3. void set_gcm_log
-						* 150건 제한
-						* prq_gcm_log 150건 제한 로그 발생
-						********************************************************************************/
-						}else if($daily_mms_cnt>$get_mno_limit->mn_mms_limit){
-							/*gcm 로그 발생*/
-							$result_msg= $li->cd_day_cnt."/".$get_mno_limit->mn_mms_limit."건 제한";
-							$gc_ipaddr='123.142.52.90';
-							$sql=array();
-							if($li->cd_port==0)
-							{
-								$li->cd_hp=$st->st_hp_1;
-							}
-
-							$sql[]="INSERT INTO `prq_gcm_log` SET ";
-							$sql[]="gc_subject='".$mms_title."',";
-							$sql[]="gc_content='".$msg."',";
-							$sql[]="gc_ismms='true',";
-							$sql[]="gc_receiver='".$li->cd_callerid."',";
-							$sql[]="gc_sender='".$li->cd_hp."',";
-							$sql[]="gc_imgurl='".$img_url."',";
-							$sql[]="gc_result='".$result_msg."',";
-							$sql[]="gc_ipaddr='".$gc_ipaddr."',";
-							$sql[]="gc_stno='".$st->st_no."',";
-							$sql[]="gc_datetime=now();";
-							mysql_query(join("",$sql));
-							$chk_mms=false;
-						}		
-
-
-						
-						/********************************************************************************
-						*
-						* 9-4. curl->simple_post('http://prq.co.kr/prq/set_gcm.php')
-						* - 수신거부 중복, 150건 제한 혹은 설정한 일수 제한 아닌 경우만
-						* - $chk_mms = true;
-						*********************************************************************************/
-						if(chk_mms)
-						{
-							/********************************************************************************
-							* 10. void set_gcm
-							* - curl 전송
-							********************************************************************************/
-							/*
-							$config=array(
-								'is_mms'=>'true',
-								'message'=>$msg,
-								'st_no'=>$st->st_no,
-								'title'=>$mms_title,
-								'receiver_num'=>$li->cd_callerid,
-								'phone'=>$li->cd_hp,
-								'img_url'=>"http://prq.co.kr/prq/uploads/TH/".$st->st_thumb_paper,
-								'mode'=>'crontab'
-							);
-							*/
-							config[0]="true";
-							config[1]=msg.toString();
-							config[2]=st_no;
-							config[3]=mms_title;
-							config[4]=cd_callerid;
-							config[5]=cd_hp;
-							config[6]="http://prq.co.kr/prq/uploads/TH/"+st_thumb_paper;
-							config[7]="crontab";
-							
-							$curl=$controller->curl->simple_post('http://prq.co.kr/prq/set_gcm.php', $config, array(CURLOPT_BUFFERSIZE => 10)); 
-							echo $curl;
-							
-
-							HttpURLConnection con = (HttpURLConnection) new URL("https://www.example.com").openConnection();
-							con.setRequestMethod("POST");
-							con.getOutputStream().write("LOGIN".getBytes("UTF-8"));
-							con.getInputStream();
-						}
+				
+						/*
+						PrintWriter out = new PrintWriter(cons.getOutputStream());
+						out.println(query);
+						out.close();
 						*/
-						/*if($chk_mms){...}*/
-					//}/* foreach($store as $st){...}*/
-
 						
-				}/* if (dao.rs().next()){...} */
+						OutputStream opstrm=cons.getOutputStream();
+						opstrm.write(query.getBytes());
+						opstrm.flush();
+						opstrm.close();
+						
+					}
+					
+					/*if($chk_mms){...}*/
+				//}/* foreach($store as $st){...}*/
+
+					
+			}/* while(dao.rs().next()){...} */
 			} catch (SQLException e) {
 				Utils.getLogger().warning(e.getMessage());
 				DBConn.latest_warning = "ErrPOS037";
@@ -503,7 +566,7 @@ public class Prq_cmd_queue {
 				dao4.closePstmt();
 				dao5.closePstmt();
 			}
-		
+			
 		}
 	}
 
@@ -1081,4 +1144,119 @@ public class Prq_cmd_queue {
 		}
 		return s;
  	}
+ 	
+
+	/**
+	 * set_cdr_kt 리스트 가져오기
+	 *
+	 * @author Taebu Moon <mtaebu@gmail.com>
+	 * @param string $cd_id  콜로그 아이디
+	 * @param string $cd_port 콜로그 포트
+	 * @return array
+	 */
+ 	
+ 	private static String[] set_cdr_kt(String[] str)
+    {
+		String[] s = new String[10]; 
+		StringBuilder sb = new StringBuilder();
+
+		MyDataObject dao = new MyDataObject();
+	
+    	sb.append("select ");
+		sb.append(" st_no,");
+		sb.append(" st_name,");
+		sb.append(" st_mno,");
+		sb.append(" st_tel_1,");
+		sb.append(" st_hp_1,");
+		sb.append(" st_thumb_paper,");
+		sb.append(" st_top_msg, ");
+		sb.append(" st_middle_msg,");
+		sb.append(" st_bottom_msg, ");
+		sb.append(" st_modoo_url ");
+		sb.append(" from ");
+		sb.append("prq_store ");
+		sb.append("where ");
+		sb.append("mb_id=? ");
+		sb.append("and st_tel_1=?");
+		
+		try {
+			dao.openPstmt(sb.toString());
+			dao.pstmt().setString(1, str[0]);
+			dao.pstmt().setString(2, str[1]);
+			
+			dao.setRs (dao.pstmt().executeQuery());
+			if(dao.rs().wasNull()){
+				s[0]="0";
+				s[1]="150";				
+			}else if (dao.rs().next()) {
+				s[0]=dao.rs().getString("st_no");
+				s[1]=dao.rs().getString("st_name");
+				s[2]=dao.rs().getString("st_mno");
+				s[3]=dao.rs().getString("st_tel_1");
+				s[4]=dao.rs().getString("st_hp_1");
+				s[5]=dao.rs().getString("st_thumb_paper");
+				s[6]=dao.rs().getString("st_top_msg");
+				s[7]=dao.rs().getString("st_middle_msg");
+				s[8]=dao.rs().getString("st_bottom_msg");
+				s[9]=dao.rs().getString("st_modoo_url ");
+			}			
+		} catch (SQLException e) {
+			Utils.getLogger().warning(e.getMessage());
+			DBConn.latest_warning = "ErrPOS039";
+			e.printStackTrace();
+		}
+		catch (Exception e) {
+			Utils.getLogger().warning(e.getMessage());
+			Utils.getLogger().warning(Utils.stack(e));
+			DBConn.latest_warning = "ErrPOS040";
+		}
+		finally {
+			dao.closePstmt();
+		}
+		return s;
+ 	}
+ 	
+	/**
+	 * 블랙 리스트 가져오기
+	 *
+	 * @author Taebu Moon <mtaebu@gmail.com>
+	 * 080-130-8119
+	 * @param string $cd_port 콜로그 포트
+	 * @return array
+	 */
+ 	private static String get_black()
+    {
+		StringBuilder sb = new StringBuilder();
+
+		MyDataObject dao = new MyDataObject();
+		List<String> msg = new ArrayList<String>();
+		sb.append("select ");
+		sb.append("bl_hp ");
+		sb.append("from ");
+		sb.append("`callerid`.black_hp ");
+		sb.append("where ");
+		sb.append("bl_dnis='0801308119';");
+		try {
+			dao.openPstmt(sb.toString());
+			dao.setRs(dao.pstmt().executeQuery());
+			while(dao.rs().next()) 
+			{
+				msg.add(dao.rs().getString("bl_hp"));
+			}
+		} catch (SQLException e) {
+			Utils.getLogger().warning(e.getMessage());
+			DBConn.latest_warning = "ErrPOS039";
+			e.printStackTrace();
+		}
+		catch (Exception e) {
+			Utils.getLogger().warning(e.getMessage());
+			Utils.getLogger().warning(Utils.stack(e));
+			DBConn.latest_warning = "ErrPOS040";
+		}
+		finally {
+			dao.closePstmt();
+		}
+		return String.join(",", msg);
+	}
+ 	
  }

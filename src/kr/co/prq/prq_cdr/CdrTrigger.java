@@ -225,7 +225,7 @@ public class CdrTrigger {
 					result = true;
 				}
 			} catch (SQLException e) {
-				if (-1 < e.getMessage().indexOf("uplicate")) {// 중복인 경우 성공으로
+				if (-1 < e.getMessage().indexOf("Duplicate")) {// 중복인 경우 성공으로
 																// 간주한다./Duplicate
 																// entry ...를
 																// 리턴하기
