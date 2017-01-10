@@ -6,7 +6,10 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 
@@ -34,14 +37,14 @@ public class Prq_cmd_queue {
 		String cd_name="";				
 		String cd_tel="";						
 		String cd_hp="";					
-		String last_cdr="";
+		String last_cdr="first_sent";
 		String chk_limit_date="";
 		String message="";
 		
 		String result_msg="";
 		String mms_title="";
 		String img_url="";
-		String gc_ipaddr="";
+		String gc_ipaddr="123.142.52.91";
 		
 		/* 상점 정보*/
 		String st_no="";
@@ -67,35 +70,24 @@ public class Prq_cmd_queue {
 		int mn_mms_limit=0;
 		int mn_dup_limit=0;
 		int chk_cd_date=0;
-		
-				
-		int eventcnt = 0;
 		int daily_mms_cnt=0;
-		String mm_daily_cnt="";
+		int mm_daily_cnt=0;
 		String[] mno_limit = new String[2];
 		
-		boolean is_hp = false;
 		boolean chk_mms = true;
 		String black_list="";
-		/****************************************************************************** 
-		* 1. 블랙 리스트 가져오기 
-		* 
-		******************************************************************************/
-		black_list=get_black();
-		Utils.getLogger().info(black_list);
+
 		
-		/* 멤버 정보 */
-		String[] member_info		= new String[75];
+		//Utils.getLogger().info(black_list);
+		
 		/* 상점 정보 */
 		String[] store_info			= new String[10];
-		/* 포인트 이벤트 정보 */
-		String[] point_event_info	= new String[7];
-		/* 유저 이벤트 정보 */
-		String[] user_event_info	= new String[3];
 		/* 콜로그 데이터 */
 		String[] cdr_info	= new String[6];
 		/* config 데이터 */
 		String[] config	= new String[6];
+		/* gcm_log 데이터 */
+		String[] gcm_log	= new String[8];
 		
 		if (con != null) {
 			MyDataObject dao = new MyDataObject();
@@ -105,11 +97,6 @@ public class Prq_cmd_queue {
 			MyDataObject dao5 = new MyDataObject();
 
 			StringBuilder sb = new StringBuilder();
-			StringBuilder sb_log = new StringBuilder();
-			StringBuilder sb2 = new StringBuilder();
-			StringBuilder sb3 = new StringBuilder();
-			StringBuilder sb4 = new StringBuilder();
-			StringBuilder sb5 = new StringBuilder();
 
 			sb.append("select * from prq_cdr  ");
 			sb.append("WHERE cd_state=0 ");
@@ -125,17 +112,18 @@ public class Prq_cmd_queue {
 				***************************************************/
 				while(dao.rs().next()) 
 				{
+					/****************************************************************************** 
+					* 1. 블랙 리스트 가져오기 
+					* 
+					******************************************************************************/
+					black_list=get_black();
 					
 					PRQ_CDR.heart_beat = 1;
-					String hist_table = DBConn.isExistTableYYYYMM();
-					int resultCnt2 = 0;
 					
 					/*	String cd_date 날짜정보, */
 					cd_date=chkValue(dao.rs().getString("cd_date"));
-					
 					/*	String cd_id 아이디  */
 					cd_id=chkValue(dao.rs().getString("cd_id"));
-					
 					/*	String cd_port 콜로그 포트 */
 					cd_port=chkValue(dao.rs().getString("cd_port"));
 					
@@ -172,6 +160,7 @@ public class Prq_cmd_queue {
 					* - 지금 들어온 데이터는 당연 예외 처리 값을 비교한 값만을 참조하고,
 					* - 처음 보내는 것은 first_send로 명명한다.
 					*******************************************************************************/
+					cd_date=chgDatetime(cd_date);
 					last_cdr=get_last_cdr(cd_date,cd_tel,cd_hp,cd_callerid);
 					
 					/*******************************************************************************
@@ -183,7 +172,7 @@ public class Prq_cmd_queue {
 					* - NEW] mn_limit_
 					* return array[0]
 					* array[1]
-					********************************************************************************/						
+					******************************************************************************/						
 					mno_limit=get_mno_limit(cd_id);
 
 
@@ -196,8 +185,9 @@ public class Prq_cmd_queue {
 					/********************************************************************************
 					* 6-1. array get_mms_daily
 					* - mms_daily 정보 가져 오기
-					********************************************************************************/
+					*********  ***********************************************************************/
 					mno_device_daily=get_mms_daily(cd_hp);
+					mm_daily_cnt=mno_device_daily;
 
 					/********************************************************************************
 					* 6-2. void set_cdr
@@ -224,12 +214,13 @@ public class Prq_cmd_queue {
 					     
 					set_cdr(cdr_info);
 					
-					chk_cd_date=Integer.parseInt(last_cdr);
 					
-					if(cd_date=="first_sent"){
-					chk_limit_date="처음 보냄";
+					
+					if(last_cdr.equals("first_sent")){
+						chk_limit_date="처음 보냄";
 					}else{
-					chk_limit_date=mn_dup_limit>chk_cd_date?"보내면 안됨":"보냄";
+						chk_cd_date=Integer.parseInt(last_cdr);
+						chk_limit_date=mn_dup_limit>chk_cd_date?"보내면 안됨":"보냄";
 					}
 
 					/********************************************************************************
@@ -244,6 +235,7 @@ public class Prq_cmd_queue {
 						config[0]=cd_id;
 						config[1]=cd_calledid;
 						store_info=get_store_kt(config);
+						
 					}else if(!cd_port.equals("0")){
 						/* 일반 CID 상점 정보 */
 						config[0]=cd_id;
@@ -251,27 +243,22 @@ public class Prq_cmd_queue {
 						store_info=get_store(config);
 						//store_info[5];
 					}
-				}
 				
+					st_no=store_info[0];
+					st_name=store_info[1];
+					st_mno=store_info[2];
+					st_tel_1=store_info[3];
+					st_hp_1=store_info[4];
+					st_thumb_paper=store_info[5];
+					st_top_msg=store_info[6];
+					st_middle_msg=store_info[7];
+					st_bottom_msg=store_info[8];
+					st_modoo_url=store_info[9];				
 				
 				
 				/* 콜로그가 KT 장비 인 경우*/
-				if(!store_info[0].equals(null))
+				if(!store_info[0].equals(""))
 				{
-					/**
-					 * store_info[0]=st_no;
-					 * store_info[1]=st_name;
-					 * store_info[2]=st_mno;
-					 * store_info[3]=st_tel_1;
-					 * store_info[4]=st_hp_1;
-					 * store_info[5]=st_thumb_paper;
-					 * store_info[6]=st_top_msg;
-					 * store_info[7]=st_middle_msg;
-					 * store_info[8]=st_bottom_msg;
-					 * store_info[9]=st_modoo_url;
-					 * */
-					
-					st_hp=store_info[4];
 					if(cd_port.equals("0"))
 					{
 						/********************************************************************************
@@ -303,6 +290,8 @@ public class Prq_cmd_queue {
 					/* 1.8 버전 가능 */
 					List<String> msg = new ArrayList<String>();
 
+					msg.add(st_top_msg);
+					mms_title=st_top_msg;
 					// "foo and bar and baz"
 					if(st_mno.equals("LG")){
 						//$msg[]=str_replace(array("\r\n", "\r",'<br />','<br>'), '\n', $st->st_middle_msg);
@@ -324,11 +313,7 @@ public class Prq_cmd_queue {
 						msg.add("리뷰 이벤트 (2,000원 지급)");
 						msg.add("http://prq.co.kr/prq/blog/write/"+st_no);
 					}
-					
-					msg.add(store_info[6]);
-					
 					msg.add(st_bottom_msg);
-					
 					msg.add(st_modoo_url);
 					/*
 					$param=ARRAY();
@@ -336,19 +321,20 @@ public class Prq_cmd_queue {
 					$param['return_type']='';
 					*/
 					if(st_mno.equals("LG")){
-						message=String.join("\r\n", msg);
+						message=String.join("\n", msg);
 					}else if(st_mno.equals("KT")){
 					//msg=join("<br>",$msg);
 						message=String.join("<br>", msg);
 					}else if(st_mno.equals("SK")){
 					//msg=join("\r\n",$msg);
-						message=String.join("\r\n", msg);
+						message=String.join("\n", msg);
 					}
 
 					//msg=str_replace("#{homepage}","http://prq.co.kr/prq/page/".st_no,$msg);
-					message=message.replaceAll("#{homepage}","http://prq.co.kr/prq/page/"+store_info[0]);
+					message=message.replaceAll("\\#\\{homepage\\}","http://prq.co.kr/prq/page/"+store_info[0]);
 					//msg=str_replace("#{st_tel}",phone_format(st_tel_1),$msg);
-					message=message.replaceAll("#{st_tel}","http://prq.co.kr/prq/page/"+store_info[3]);
+					message=message.replaceAll("\\#\\{st\\_tel\\}",store_info[3]);
+					Utils.getLogger().info("message : "+message);
 					//echo $msg;
 					
 
@@ -365,30 +351,21 @@ public class Prq_cmd_queue {
 					{
 						/*gcm 로그 발생*/
 						result_msg= "수신거부";
-						//gc_ipaddr='123.142.52.91';
-						
 
 						if(cd_port.equals("0"))
 						{
 							//$li->cd_hp=$st->st_hp_1;
 							cd_hp= store_info[4];
 						}
-						
-						sb2.append("INSERT INTO `prq_gcm_log` SET ");
-						sb2.append("gc_subject='"+mms_title+"',");
-						sb2.append("gc_content='"+message+"',");
-						sb2.append("gc_ismms='true',");
-						sb2.append("gc_receiver='"+cd_callerid+"',");
-						sb2.append("gc_sender='"+cd_hp+"',");
-						sb2.append("gc_imgurl='"+img_url+"',");
-						sb2.append("gc_result='"+result_msg+"',");
-						sb2.append("gc_ipaddr='"+gc_ipaddr+"',");
-						sb2.append("gc_stno='"+st_no+"',");
-						sb2.append("gc_datetime=now();");
-						dao2.openPstmt(sb2.toString());
-
-						dao2.pstmt().executeUpdate();
-						
+						gcm_log[0]=mms_title;
+						gcm_log[1]=message;
+						gcm_log[2]=cd_callerid;
+						gcm_log[3]=cd_hp;
+						gcm_log[4]=img_url;
+						gcm_log[5]=result_msg;
+						gcm_log[6]=gc_ipaddr;
+						gcm_log[7]=st_no;
+						set_gcm_log(gcm_log);
 						
 						chk_mms=false;
 					}
@@ -398,7 +375,7 @@ public class Prq_cmd_queue {
 					/* 일간 mms 발송건 초기값 */
 					daily_mms_cnt=0;
 					/* 일간 mms 발송건 디바이스 값 */
-					daily_mms_cnt+=Integer.parseInt(mm_daily_cnt);
+					daily_mms_cnt+=mm_daily_cnt;
 					/* 일간 mms 발송건 prq 값 */
 					daily_mms_cnt+=cd_day_cnt;
 					
@@ -411,7 +388,6 @@ public class Prq_cmd_queue {
 					if(cd_date.equals("first_sent")){
 						/*gcm 로그 발생*/
 						result_msg= "처음 발송 / "+mn_dup_limit;
-						//gc_ipaddr='123.142.52.90';
 						
 						if(cd_port.equals(0))
 						{
@@ -425,7 +401,7 @@ public class Prq_cmd_queue {
 					* 중복 제한 보내면 안됨 
 					* prq_gcm_log 중복제한 로그 발생
 					********************************************************************************/
-					}else if(mn_dup_limit>Integer.parseInt(cd_date)){
+					}else if(mn_dup_limit>Integer.parseInt(last_cdr)){
 						/*gcm 로그 발생*/
 						/* 2016-11-22 (화)
 						* https://github.com/Taebu/prq/issues/57
@@ -433,28 +409,22 @@ public class Prq_cmd_queue {
 						*/
 
 						//$result_msg= $cd_date."/".$get_mno_limit->mn_dup_limit."일 중복 제한";
-						result_msg= cd_date+"/"+mn_dup_limit+"일 발송";
-						//gc_ipaddr='123.142.52.90';
+						result_msg= last_cdr+"/"+mn_dup_limit+"일 발송";
 						
 						if(cd_port.equals(0))
 						{
 							cd_hp=st_hp_1;
 						}
 
-						sb3.append("INSERT INTO `prq_gcm_log` SET ");
-						sb3.append("gc_subject='"+mms_title+"',");
-						sb3.append("gc_content='"+message+"',");
-						sb3.append("gc_ismms='true',");
-						sb3.append("gc_receiver='"+cd_callerid+"',");
-						sb3.append("gc_sender='"+cd_hp+"',");
-						sb3.append("gc_imgurl='"+img_url+"',");
-						sb3.append("gc_result='"+result_msg+"',");
-						sb3.append("gc_ipaddr='"+gc_ipaddr+"',");
-						sb3.append("gc_stno='"+st_no+"',");
-						sb3.append("gc_datetime=now();");
-						dao3.openPstmt(sb3.toString());
-
-						dao3.pstmt().executeUpdate();
+						gcm_log[0]=mms_title;
+						gcm_log[1]=message;
+						gcm_log[2]=cd_callerid;
+						gcm_log[3]=cd_hp;
+						gcm_log[4]=img_url;
+						gcm_log[5]=result_msg;
+						gcm_log[6]=gc_ipaddr;
+						gcm_log[7]=st_no;
+						set_gcm_log(gcm_log);
 						/* 2016-11-22 (화)
 						* https://github.com/Taebu/prq/issues/57
 						* 조정흠씨 자체 개발로 인해 중복 제한 비활성화
@@ -468,27 +438,22 @@ public class Prq_cmd_queue {
 					}else if(daily_mms_cnt>mn_mms_limit){
 						/*gcm 로그 발생*/
 						result_msg= cd_day_cnt+"/"+mn_mms_limit+"건 제한";
-						//gc_ipaddr='123.142.52.90';
 						
 						if(cd_port.equals(0))
 						{
 							cd_hp=st_hp_1;
 						}
 
-						sb4.append("INSERT INTO `prq_gcm_log` SET ");
-						sb4.append("gc_subject='"+mms_title+"',");
-						sb4.append("gc_content='"+message+"',");
-						sb4.append("gc_ismms='true',");
-						sb4.append("gc_receiver='"+cd_callerid+"',");
-						sb4.append("gc_sender='"+cd_hp+"',");
-						sb4.append("gc_imgurl='"+img_url+"',");
-						sb4.append("gc_result='"+result_msg+"',");
-						sb4.append("gc_ipaddr='"+gc_ipaddr+"',");
-						sb4.append("gc_stno='"+st_no+"',");
-						sb4.append("gc_datetime=now();");
-						dao4.openPstmt(sb4.toString());
-
-						dao4.pstmt().executeUpdate();
+						gcm_log[0]=mms_title;
+						gcm_log[1]=message;
+						gcm_log[2]=cd_callerid;
+						gcm_log[3]=cd_hp;
+						gcm_log[4]=img_url;
+						gcm_log[5]=result_msg;
+						gcm_log[6]=gc_ipaddr;
+						gcm_log[7]=st_no;
+						set_gcm_log(gcm_log);
+						
 						chk_mms=false;
 					}		
 
@@ -557,103 +522,27 @@ public class Prq_cmd_queue {
 					/*if($chk_mms){...}*/
 				//}/* foreach($store as $st){...}*/
 
-					
-			}/* while(dao.rs().next()){...} */
+				}/* while(dao.rs().next()){...} */	
+			}
+				
 			} catch (SQLException e) {
 				Utils.getLogger().warning(e.getMessage());
-				DBConn.latest_warning = "ErrPOS037";
+				DBConn.latest_warning = "ErrPOS001";
 				e.printStackTrace();
 			}
 			catch (Exception e) {
 				Utils.getLogger().warning(e.getMessage());
-				DBConn.latest_warning = "ErrPOS038";
+				DBConn.latest_warning = "ErrPOS002";
 				Utils.getLogger().warning(Utils.stack(e));
 			}
 			finally {
 				dao.closePstmt();
-				dao2.closePstmt();
-				dao3.closePstmt();
-				dao4.closePstmt();
-				dao5.closePstmt();
 			}
 			
 		}
 	}
 
 	
-	/**
-	 * 콜 리스트 가져오기
-	 * getCdr()
-	 * @author Taebu Moon <mtaebu@gmail.com>
-	 * @return ArrayList<HashMap<String, String>> list
-	 */
-    public static ArrayList<HashMap<String, String>> getCdr() {
-		ArrayList<HashMap<String,String>> list = new ArrayList<HashMap<String,String>>();
-		String sql="";
-					
-		MyDataObject dao = new MyDataObject();
-		MyDataObject dao2 = new MyDataObject();
-		MyDataObject dao3 = new MyDataObject();
-
-		sql="select * from prq_cdr  "+
-		"WHERE cd_state=0 "+
-		"AND cd_callerid LIKE '01%';";
-
-		try {
-			dao.openPstmt(sql);
-			//dao.pstmt().setString(1, mb_hp);
-			dao.setRs(dao.pstmt().executeQuery());
-			while (dao.rs().next()) 
-			{
-				HashMap<String,String> map = new HashMap<String,String>();
-				map.put("cd_date",dao.rs().getString("cd_date"));
-				map.put("cd_id",dao.rs().getString("cd_id"));
-				map.put("cd_port",dao.rs().getString("cd_port"));
-				map.put("cd_callerid",dao.rs().getString("cd_callerid"));
-				map.put("cd_calledid",dao.rs().getString("cd_calledid"));
-				map.put("cd_state",dao.rs().getString("cd_state"));
-				map.put("cd_name",dao.rs().getString("cd_name"));
-				map.put("cd_tel",dao.rs().getString("cd_tel"));
-				map.put("cd_hp",dao.rs().getString("cd_hp"));
-				map.put("cd_day_cnt",dao.rs().getString("cd_day_cnt"));
-				map.put("cd_day_limit",dao.rs().getString("cd_day_limit"));
-				map.put("cd_device_day_cnt", dao.rs().getString("cd_device_day_cnt"));
-				list.add(map);
-			}
-			
-			/*처리한 번호 핸드폰 발송 처리 */
-			sql="UPDATE prq_cdr SET cd_state=1 "+
-			"WHERE cd_state=0 "+
-			"and cd_callerid like '01%';";
-			dao2.openPstmt(sql);
-			dao2.pstmt().executeUpdate();
-
-			/*처리한 번호 일반 번호  미발송  처리 cd_state=2 */
-			sql="UPDATE prq_cdr SET cd_state=2 "+
-			"WHERE cd_state=0 "+
-			"and cd_callerid not like '01%';";
-			dao3.openPstmt(sql);
-			dao3.pstmt().executeUpdate();
-			
-
-		} catch (SQLException e) {
-			Utils.getLogger().warning(e.getMessage());
-			DBConn.latest_warning = "ErrPOS039";
-			e.printStackTrace();
-		}
-		catch (Exception e) {
-			Utils.getLogger().warning(e.getMessage());
-			Utils.getLogger().warning(Utils.stack(e));
-			DBConn.latest_warning = "ErrPOS040";
-		}
-		finally {
-			dao.closePstmt();
-			dao2.closePstmt();
-			dao3.closePstmt();
-		}
-
-		return list;
-	}
 
     /**
      * chkValue
@@ -682,7 +571,7 @@ public class Prq_cmd_queue {
 	* @return String
 	*/
 	private static String get_last_cdr(String cd_date, String cd_tel,String cd_hp,String cd_callerid) {
-		String retVal = "";
+		String retVal = "first_sent";
 		StringBuilder sb = new StringBuilder();
 		StringBuilder sb2 = new StringBuilder();
 		MyDataObject dao = new MyDataObject();
@@ -723,13 +612,13 @@ public class Prq_cmd_queue {
 			}			
 		} catch (SQLException e) {
 			Utils.getLogger().warning(e.getMessage());
-			DBConn.latest_warning = "ErrPOS039";
+			DBConn.latest_warning = "ErrPOS003";
 			e.printStackTrace();
 		}
 		catch (Exception e) {
 			Utils.getLogger().warning(e.getMessage());
 			Utils.getLogger().warning(Utils.stack(e));
-			DBConn.latest_warning = "ErrPOS040";
+			DBConn.latest_warning = "ErrPOS004";
 		}
 		finally {
 			dao.closePstmt();
@@ -750,6 +639,8 @@ public class Prq_cmd_queue {
 	*/
 	private static String[] get_mno_limit(String cd_hp) {
 		String[] s = new String[2]; 
+		s[0]="0";
+		s[1]="150";
 		StringBuilder sb = new StringBuilder();
 
 		MyDataObject dao = new MyDataObject();
@@ -766,22 +657,22 @@ public class Prq_cmd_queue {
 			dao.pstmt().setString(1, cd_hp);
 			
 			dao.setRs (dao.pstmt().executeQuery());
-			if(dao.rs().wasNull()){
-				s[0]="0";
-				s[1]="150";				
-			}else if (dao.rs().next()) {
+			if (dao.rs().next()) 
+			{
 				s[0]=dao.rs().getString("mn_mms_limit");
 				s[1]=dao.rs().getString("mn_dup_limit");
 			}			
+			Utils.getLogger().info(s[0]);
+			Utils.getLogger().info(s[1]);
 		} catch (SQLException e) {
 			Utils.getLogger().warning(e.getMessage());
-			DBConn.latest_warning = "ErrPOS039";
+			DBConn.latest_warning = "ErrPOS005";
 			e.printStackTrace();
 		}
 		catch (Exception e) {
 			Utils.getLogger().warning(e.getMessage());
 			Utils.getLogger().warning(Utils.stack(e));
-			DBConn.latest_warning = "ErrPOS040";
+			DBConn.latest_warning = "ErrPOS006";
 		}
 		finally {
 			dao.closePstmt();
@@ -816,13 +707,13 @@ public class Prq_cmd_queue {
 			}			
 		} catch (SQLException e) {
 			Utils.getLogger().warning(e.getMessage());
-			DBConn.latest_warning = "ErrPOS039";
+			DBConn.latest_warning = "ErrPOS007";
 			e.printStackTrace();
 		}
 		catch (Exception e) {
 			Utils.getLogger().warning(e.getMessage());
 			Utils.getLogger().warning(Utils.stack(e));
-			DBConn.latest_warning = "ErrPOS040";
+			DBConn.latest_warning = "ErrPOS008";
 		}
 		finally {
 			dao.closePstmt();
@@ -867,13 +758,13 @@ public class Prq_cmd_queue {
 			}			
 		} catch (SQLException e) {
 			Utils.getLogger().warning(e.getMessage());
-			DBConn.latest_warning = "ErrPOS039";
+			DBConn.latest_warning = "ErrPOS009";
 			e.printStackTrace();
 		}
 		catch (Exception e) {
 			Utils.getLogger().warning(e.getMessage());
 			Utils.getLogger().warning(Utils.stack(e));
-			DBConn.latest_warning = "ErrPOS040";
+			DBConn.latest_warning = "ErrPOS010";
 		}
 		finally {
 			dao.closePstmt();
@@ -924,13 +815,13 @@ public class Prq_cmd_queue {
 						
 		} catch (SQLException e) {
 			Utils.getLogger().warning(e.getMessage());
-			DBConn.latest_warning = "ErrPOS039";
+			DBConn.latest_warning = "ErrPOS011";
 			e.printStackTrace();
 		}
 		catch (Exception e) {
 			Utils.getLogger().warning(e.getMessage());
 			Utils.getLogger().warning(Utils.stack(e));
-			DBConn.latest_warning = "ErrPOS040";
+			DBConn.latest_warning = "ErrPOS012";
 		}
 		finally {
 			dao.closePstmt();
@@ -949,7 +840,16 @@ public class Prq_cmd_queue {
     {
 		String[] s = new String[10]; 
 		StringBuilder sb = new StringBuilder();
-
+		s[0]="0";
+		s[1]="150";
+		s[2]="150";
+		s[3]="150";
+		s[4]="150";
+		s[5]="150";
+		s[6]="150";
+		s[7]="150";
+		s[8]="150";
+		s[9]="150";
 		MyDataObject dao = new MyDataObject();
 				
 		sb.append("SELECT ");
@@ -975,18 +875,7 @@ public class Prq_cmd_queue {
 			dao.pstmt().setString(2, str[1]);
 			
 			dao.setRs (dao.pstmt().executeQuery());
-			if(dao.rs().wasNull()){
-				s[0]="0";
-				s[1]="150";
-				s[2]="150";
-				s[3]="150";
-				s[4]="150";
-				s[5]="150";
-				s[6]="150";
-				s[7]="150";
-				s[8]="150";
-				s[9]="150";
-			}else if (dao.rs().next()) {
+			if (dao.rs().next()) {
 				s[0]=dao.rs().getString("st_no");
 				s[1]=dao.rs().getString("st_name");
 				s[2]=dao.rs().getString("st_mno");
@@ -996,17 +885,17 @@ public class Prq_cmd_queue {
 				s[6]=dao.rs().getString("st_top_msg");
 				s[7]=dao.rs().getString("st_middle_msg");
 				s[8]=dao.rs().getString("st_bottom_msg");
-				s[9]=dao.rs().getString("st_modoo_url ");
+				s[9]=dao.rs().getString("st_modoo_url");
 			}			
 		} catch (SQLException e) {
 			Utils.getLogger().warning(e.getMessage());
-			DBConn.latest_warning = "ErrPOS039";
+			DBConn.latest_warning = "ErrPOS013";
 			e.printStackTrace();
 		}
 		catch (Exception e) {
 			Utils.getLogger().warning(e.getMessage());
 			Utils.getLogger().warning(Utils.stack(e));
-			DBConn.latest_warning = "ErrPOS040";
+			DBConn.latest_warning = "ErrPOS014";
 		}
 		finally {
 			dao.closePstmt();
@@ -1027,6 +916,16 @@ public class Prq_cmd_queue {
  	private static String[] get_store_kt(String[] str)
     {
 		String[] s = new String[10]; 
+		s[0]="0";
+		s[1]="150";				
+		s[2]="150";				
+		s[3]="150";				
+		s[4]="150";				
+		s[5]="150";				
+		s[6]="150";				
+		s[7]="150";				
+		s[8]="150";				
+		s[9]="150";		
 		StringBuilder sb = new StringBuilder();
 
 		MyDataObject dao = new MyDataObject();
@@ -1054,10 +953,8 @@ public class Prq_cmd_queue {
 			dao.pstmt().setString(2, str[1]);
 			
 			dao.setRs (dao.pstmt().executeQuery());
-			if(dao.rs().wasNull()){
-				s[0]="0";
-				s[1]="150";				
-			}else if (dao.rs().next()) {
+			if (dao.rs().next()) 
+			{
 				s[0]=dao.rs().getString("st_no");
 				s[1]=dao.rs().getString("st_name");
 				s[2]=dao.rs().getString("st_mno");
@@ -1067,17 +964,17 @@ public class Prq_cmd_queue {
 				s[6]=dao.rs().getString("st_top_msg");
 				s[7]=dao.rs().getString("st_middle_msg");
 				s[8]=dao.rs().getString("st_bottom_msg");
-				s[9]=dao.rs().getString("st_modoo_url ");
+				s[9]=dao.rs().getString("st_modoo_url");
 			}			
 		} catch (SQLException e) {
 			Utils.getLogger().warning(e.getMessage());
-			DBConn.latest_warning = "ErrPOS039";
+			DBConn.latest_warning = "ErrPOS015";
 			e.printStackTrace();
 		}
 		catch (Exception e) {
 			Utils.getLogger().warning(e.getMessage());
 			Utils.getLogger().warning(Utils.stack(e));
-			DBConn.latest_warning = "ErrPOS040";
+			DBConn.latest_warning = "ErrPOS016";
 		}
 		finally {
 			dao.closePstmt();
@@ -1142,13 +1039,13 @@ public class Prq_cmd_queue {
 			}			
 		} catch (SQLException e) {
 			Utils.getLogger().warning(e.getMessage());
-			DBConn.latest_warning = "ErrPOS039";
+			DBConn.latest_warning = "ErrPOS017";
 			e.printStackTrace();
 		}
 		catch (Exception e) {
 			Utils.getLogger().warning(e.getMessage());
 			Utils.getLogger().warning(Utils.stack(e));
-			DBConn.latest_warning = "ErrPOS040";
+			DBConn.latest_warning = "ErrPOS018";
 		}
 		finally {
 			dao.closePstmt();
@@ -1185,13 +1082,13 @@ public class Prq_cmd_queue {
 			}
 		} catch (SQLException e) {
 			Utils.getLogger().warning(e.getMessage());
-			DBConn.latest_warning = "ErrPOS039";
+			DBConn.latest_warning = "ErrPOS019";
 			e.printStackTrace();
 		}
 		catch (Exception e) {
 			Utils.getLogger().warning(e.getMessage());
 			Utils.getLogger().warning(Utils.stack(e));
-			DBConn.latest_warning = "ErrPOS040";
+			DBConn.latest_warning = "ErrPOS020";
 		}
 		finally {
 			dao.closePstmt();
@@ -1230,17 +1127,86 @@ public class Prq_cmd_queue {
 			}
 		} catch (SQLException e) {
 			Utils.getLogger().warning(e.getMessage());
-			DBConn.latest_warning = "ErrPOS039";
+			DBConn.latest_warning = "ErrPOS021";
 			e.printStackTrace();
 		}
 		catch (Exception e) {
 			Utils.getLogger().warning(e.getMessage());
 			Utils.getLogger().warning(Utils.stack(e));
-			DBConn.latest_warning = "ErrPOS040";
+			DBConn.latest_warning = "ErrPOS022";
 		}
 		finally {
 			dao.closePstmt();
 		}
 		return retVal;
     }
- }
+
+	// yyyy-MM-dd HH:mm:ss.0 을 yyyy-MM-dd HH:mm:ss날짜로 변경
+	public static String chgDatetime(String str)
+	{
+		String retVal="";
+
+		try{
+		SimpleDateFormat simpleDate = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+		Date historyDate = simpleDate.parse(str);
+		retVal=simpleDate.format(historyDate);
+		}catch(ParseException e){
+		}
+		return retVal;
+	}
+
+	
+	/**
+	 * 금일 보낸 발송 갯수 갱신
+	 *
+	 * @author Taebu Moon <mtaebu@gmail.com>
+	 * @param string $table 게시판 테이블
+	 * @param string $id 게시물번호
+	 * @return array
+	 */
+	private static void set_gcm_log(String[] str)
+    {
+		StringBuilder sb = new StringBuilder();
+
+		MyDataObject dao = new MyDataObject();
+				
+
+		sb.append("INSERT INTO `prq_gcm_log` SET ");
+		sb.append("gc_subject=?,");
+		sb.append("gc_content=?,");
+		sb.append("gc_ismms='true',");
+		sb.append("gc_receiver=?,");
+		sb.append("gc_sender=?,");
+		sb.append("gc_imgurl=?,");
+		sb.append("gc_result=?,");
+		sb.append("gc_ipaddr=?,");
+		sb.append("gc_stno=?,");
+		sb.append("gc_datetime=now();");
+		try {
+			dao.openPstmt(sb.toString());
+			dao.pstmt().setString(1, str[0]);
+			dao.pstmt().setString(2, str[1]);
+			dao.pstmt().setString(3, str[2]);
+			dao.pstmt().setString(4, str[3]);
+			dao.pstmt().setString(5, str[4]);
+			dao.pstmt().setString(6, str[5]);
+			dao.pstmt().setString(7, str[6]);
+			/* 조회한 콜로그의 일 발송량 갱신 */
+			dao.pstmt().executeUpdate();
+
+						
+		} catch (SQLException e) {
+			Utils.getLogger().warning(e.getMessage());
+			DBConn.latest_warning = "ErrPOS023";
+			e.printStackTrace();
+		}
+		catch (Exception e) {
+			Utils.getLogger().warning(e.getMessage());
+			Utils.getLogger().warning(Utils.stack(e));
+			DBConn.latest_warning = "ErrPOS024";
+		}
+		finally {
+			dao.closePstmt();
+		}
+    }	
+}
