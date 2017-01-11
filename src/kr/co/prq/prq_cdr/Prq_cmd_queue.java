@@ -1,17 +1,19 @@
 package kr.co.prq.prq_cdr;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
-import java.io.PrintWriter;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLConnection;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
+import java.util.regex.Pattern;
 
 //import com.nostech.safen.SafeNo;
 
@@ -91,11 +93,6 @@ public class Prq_cmd_queue {
 		
 		if (con != null) {
 			MyDataObject dao = new MyDataObject();
-			MyDataObject dao2 = new MyDataObject();
-			MyDataObject dao3 = new MyDataObject();
-			MyDataObject dao4 = new MyDataObject();
-			MyDataObject dao5 = new MyDataObject();
-
 			StringBuilder sb = new StringBuilder();
 
 			sb.append("select * from prq_cdr  ");
@@ -119,6 +116,7 @@ public class Prq_cmd_queue {
 					black_list=get_black();
 					
 					PRQ_CDR.heart_beat = 1;
+					
 					
 					/*	String cd_date 날짜정보, */
 					cd_date=chkValue(dao.rs().getString("cd_date"));
@@ -160,6 +158,7 @@ public class Prq_cmd_queue {
 					* - 지금 들어온 데이터는 당연 예외 처리 값을 비교한 값만을 참조하고,
 					* - 처음 보내는 것은 first_send로 명명한다.
 					*******************************************************************************/
+					/*0000-00-00 00:00:00.0 to 0000-00-00 00:00:00 */
 					cd_date=chgDatetime(cd_date);
 					last_cdr=get_last_cdr(cd_date,cd_tel,cd_hp,cd_callerid);
 					
@@ -171,10 +170,11 @@ public class Prq_cmd_queue {
 					* - 3일 동안 보내지 않습니다.  
 					* - NEW] mn_limit_
 					* return array[0]
-					* array[1]
+					* mno_limit[0] =	mn_mms_limit
+					* mno_limit[1] = mn_dup_limit
 					******************************************************************************/						
 					mno_limit=get_mno_limit(cd_id);
-
+						
 
 					/********************************************************************************
 					* 5. array get_send_cnt
@@ -204,13 +204,19 @@ public class Prq_cmd_queue {
 					 * cdr_info[3] 'cd_device_day_cnt'
 					 * cdr_info[4] 'cd_day_limit'
 					 * cdr_info[5] 'get_day_cnt'
+					 * 
+					 * 	sb.append("cd_device_day_cnt=?,");
+					 *	sb.append("cd_day_cnt=? ");
+					 * 	sb.append(" WHERE cd_date=? ");
+					 *	sb.append(" and cd_tel=? ");
+					 * 	sb.append(" and cd_hp=? ;");
 					 */
-					cdr_info[0]=cd_date;
-					cdr_info[1]=cd_tel;
-					cdr_info[2]=cd_hp;
-					cdr_info[3]=mno_limit[0];
-					cdr_info[4]=mno_limit[1];
-					cdr_info[5]=Integer.toString(day_cnt);
+					//cdr_info[0]=Integer.toString(day_cnt);
+					cdr_info[0]=Integer.toString(mm_daily_cnt);
+					cdr_info[1]=Integer.toString(day_cnt);
+					cdr_info[2]=cd_date;
+					cdr_info[3]=cd_tel;
+					cdr_info[4]=cd_hp;
 					     
 					set_cdr(cdr_info);
 					
@@ -261,6 +267,12 @@ public class Prq_cmd_queue {
 				{
 					if(cd_port.equals("0"))
 					{
+						/*
+							sb.append("cd_name=?,");
+							sb.append("cd_tel=?,");
+							sb.append("cd_hp=? ");
+							sb.append(" WHERE cd_date=? ");
+							sb.append(" and cd_port=0; ");
 						/********************************************************************************
 						* 8. void set_cdr_kt 
 						* - KT_CID 포트 구분이 없다.
@@ -268,12 +280,10 @@ public class Prq_cmd_queue {
 						* - 개발 당시 한번의 핸드폰 건만 하루 전송하고 이외에 콜은 인정하지 않는다.
 						* - cdr kt 세팅
 						********************************************************************************/
-						cdr_info[0]=cd_date;
-						cdr_info[1]=cd_callerid;
-						cdr_info[2]=cd_calledid;
-						cdr_info[3]=store_info[1];
-						cdr_info[4]=store_info[3];
-						cdr_info[5]=store_info[4];
+						cdr_info[0]=st_name;
+						cdr_info[1]=st_tel_1;
+						cdr_info[2]=st_hp_1;
+						cdr_info[3]=cd_date;
 						//페이지네이션 기본 설정
 						
 						set_cdr_kt(cdr_info);
@@ -355,7 +365,7 @@ public class Prq_cmd_queue {
 						if(cd_port.equals("0"))
 						{
 							//$li->cd_hp=$st->st_hp_1;
-							cd_hp= store_info[4];
+							cd_hp= st_hp_1;
 						}
 						gcm_log[0]=mms_title;
 						gcm_log[1]=message;
@@ -385,11 +395,11 @@ public class Prq_cmd_queue {
 					* - 처음 보낼 때 안보내지던 버그 수정
 					* - $chk_mms = true;
 					*********************************************************************************/
-					if(cd_date.equals("first_sent")){
+					if(last_cdr.equals("first_sent")){
 						/*gcm 로그 발생*/
 						result_msg= "처음 발송 / "+mn_dup_limit;
 						
-						if(cd_port.equals(0))
+						if(cd_port.equals("0"))
 						{
 							cd_hp=st_hp_1;
 						}
@@ -411,7 +421,7 @@ public class Prq_cmd_queue {
 						//$result_msg= $cd_date."/".$get_mno_limit->mn_dup_limit."일 중복 제한";
 						result_msg= last_cdr+"/"+mn_dup_limit+"일 발송";
 						
-						if(cd_port.equals(0))
+						if(cd_port.equals("0"))
 						{
 							cd_hp=st_hp_1;
 						}
@@ -439,7 +449,7 @@ public class Prq_cmd_queue {
 						/*gcm 로그 발생*/
 						result_msg= cd_day_cnt+"/"+mn_mms_limit+"건 제한";
 						
-						if(cd_port.equals(0))
+						if(cd_port.equals("0"))
 						{
 							cd_hp=st_hp_1;
 						}
@@ -485,7 +495,7 @@ public class Prq_cmd_queue {
 						*/
 						String query="";
 						query="is_mms=true";
-						query+="&message="+msg.toString();
+						query+="&message="+message;
 						query+="&st_no="+st_no;
 						query+="&title="+mms_title;
 						query+="&receiver_num="+cd_callerid;
@@ -496,32 +506,53 @@ public class Prq_cmd_queue {
 						//$curl=$controller->curl->simple_post('http://prq.co.kr/prq/set_gcm.php', $config, array(CURLOPT_BUFFERSIZE => 10)); 
 						//echo $curl;
 						
+						URL targetURL = new URL("http://prq.co.kr/prq/set_gcm.php");
+						URLConnection urlConn = targetURL.openConnection();
+						HttpURLConnection cons = (HttpURLConnection) urlConn;
+						// 헤더값을 설정한다.
+						cons.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
 
-						HttpURLConnection cons = (HttpURLConnection) new URL("http://prq.co.kr/prq/set_gcm.php").openConnection();
 						cons.setRequestMethod("POST");
 						//cons.getOutputStream().write("LOGIN".getBytes("UTF-8"));
 						cons.setDoOutput(true);
 						cons.setDoInput(true);
 						cons.setUseCaches(false);
 						cons.setDefaultUseCaches(false);
-						
-				
+
+
 						/*
 						PrintWriter out = new PrintWriter(cons.getOutputStream());
 						out.println(query);
-						out.close();
-						*/
-						
+						out.close();*/
 						OutputStream opstrm=cons.getOutputStream();
 						opstrm.write(query.getBytes());
 						opstrm.flush();
 						opstrm.close();
-						
+
+						String buffer = null;
+						String bufferHtml="empty";
+						BufferedReader in = new BufferedReader(new InputStreamReader(cons.getInputStream()));
+
+						 while ((buffer = in.readLine()) != null) {
+							 bufferHtml += buffer;
+						}
+						Utils.getLogger().info(bufferHtml);
+						in.close();
+
 					}
 					
 					/*if($chk_mms){...}*/
 				//}/* foreach($store as $st){...}*/
-
+					//select * from prq_cdr where cd_date='2017-01-11 10:06:54' and cd_id='0314348635@naver.com' and cd_port='0' and cd_callerid='01055599880';
+					
+					/* 발송 처리 핸드폰 일반 번호 */
+					cdr_info[0]=cd_date;
+					cdr_info[1]=cd_id;
+					cdr_info[2]=cd_port;
+					cdr_info[3]=cd_callerid;
+					set_sendcdr(cdr_info);
+				    
+					
 				}/* while(dao.rs().next()){...} */	
 			}
 				
@@ -639,7 +670,7 @@ public class Prq_cmd_queue {
 	*/
 	private static String[] get_mno_limit(String cd_hp) {
 		String[] s = new String[2]; 
-		s[0]="0";
+		s[0]="7";
 		s[1]="150";
 		StringBuilder sb = new StringBuilder();
 
@@ -662,8 +693,6 @@ public class Prq_cmd_queue {
 				s[0]=dao.rs().getString("mn_mms_limit");
 				s[1]=dao.rs().getString("mn_dup_limit");
 			}			
-			Utils.getLogger().info(s[0]);
-			Utils.getLogger().info(s[1]);
 		} catch (SQLException e) {
 			Utils.getLogger().warning(e.getMessage());
 			DBConn.latest_warning = "ErrPOS005";
@@ -744,7 +773,6 @@ public class Prq_cmd_queue {
 		sb.append(" ORDER BY ");
 		sb.append(" mm_datetime DESC ");
 		sb.append(" LIMIT 1;");
-		
 		try {
 			dao.openPstmt(sb.toString());
 			dao.pstmt().setString(1, st_hp);
@@ -793,7 +821,6 @@ public class Prq_cmd_queue {
 		dao2.pstmt().executeUpdate()
 		*/
 		StringBuilder sb = new StringBuilder();
-
 		MyDataObject dao = new MyDataObject();
 		
 		sb.append("UPDATE prq_cdr SET ");
@@ -826,7 +853,8 @@ public class Prq_cmd_queue {
 		finally {
 			dao.closePstmt();
 		}
-    }	
+    }
+	
 	//select bl_hp from `callerid`.black_hp where bl_dnis='0801308119';
 	/**
 	 * STORE 리스트 가져오기
@@ -984,59 +1012,35 @@ public class Prq_cmd_queue {
  	
 
 	/**
-	 * set_cdr_kt 리스트 가져오기
+	 * set_cdr_kt 
 	 *
 	 * @author Taebu Moon <mtaebu@gmail.com>
 	 * @param string $cd_id  콜로그 아이디
 	 * @param string $cd_port 콜로그 포트
-	 * @return array
+	 * @return void
 	 */
  	
- 	private static String[] set_cdr_kt(String[] str)
+ 	private static void set_cdr_kt(String[] str)
     {
-		String[] s = new String[10]; 
 		StringBuilder sb = new StringBuilder();
-
 		MyDataObject dao = new MyDataObject();
-	
-    	sb.append("select ");
-		sb.append(" st_no,");
-		sb.append(" st_name,");
-		sb.append(" st_mno,");
-		sb.append(" st_tel_1,");
-		sb.append(" st_hp_1,");
-		sb.append(" st_thumb_paper,");
-		sb.append(" st_top_msg, ");
-		sb.append(" st_middle_msg,");
-		sb.append(" st_bottom_msg, ");
-		sb.append(" st_modoo_url ");
-		sb.append(" from ");
-		sb.append("prq_store ");
-		sb.append("where ");
-		sb.append("mb_id=? ");
-		sb.append("and st_tel_1=?");
 		
+		sb.append("UPDATE prq_cdr SET ");
+		sb.append("cd_name=?,");
+		sb.append("cd_tel=?,");
+		sb.append("cd_hp=? ");
+		sb.append(" WHERE cd_date=? ");
+		sb.append(" and cd_port=0; ");
 		try {
 			dao.openPstmt(sb.toString());
 			dao.pstmt().setString(1, str[0]);
 			dao.pstmt().setString(2, str[1]);
-			
-			dao.setRs (dao.pstmt().executeQuery());
-			if(dao.rs().wasNull()){
-				s[0]="0";
-				s[1]="150";				
-			}else if (dao.rs().next()) {
-				s[0]=dao.rs().getString("st_no");
-				s[1]=dao.rs().getString("st_name");
-				s[2]=dao.rs().getString("st_mno");
-				s[3]=dao.rs().getString("st_tel_1");
-				s[4]=dao.rs().getString("st_hp_1");
-				s[5]=dao.rs().getString("st_thumb_paper");
-				s[6]=dao.rs().getString("st_top_msg");
-				s[7]=dao.rs().getString("st_middle_msg");
-				s[8]=dao.rs().getString("st_bottom_msg");
-				s[9]=dao.rs().getString("st_modoo_url ");
-			}			
+			dao.pstmt().setString(3, str[2]);
+			dao.pstmt().setString(4, str[3]);
+			/* 조회한 콜로그의 일 발송량 갱신 */
+			dao.pstmt().executeUpdate();
+
+						
 		} catch (SQLException e) {
 			Utils.getLogger().warning(e.getMessage());
 			DBConn.latest_warning = "ErrPOS017";
@@ -1050,7 +1054,6 @@ public class Prq_cmd_queue {
 		finally {
 			dao.closePstmt();
 		}
-		return s;
  	}
  	
 	/**
@@ -1170,7 +1173,16 @@ public class Prq_cmd_queue {
 
 		MyDataObject dao = new MyDataObject();
 				
-
+/*
+ * 						gcm_log[0]=mms_title;
+						gcm_log[1]=message;
+						gcm_log[2]=cd_callerid;
+						gcm_log[3]=cd_hp;
+						gcm_log[4]=img_url;
+						gcm_log[5]=result_msg;
+						gcm_log[6]=gc_ipaddr;
+						gcm_log[7]=st_no;
+ * */
 		sb.append("INSERT INTO `prq_gcm_log` SET ");
 		sb.append("gc_subject=?,");
 		sb.append("gc_content=?,");
@@ -1191,6 +1203,7 @@ public class Prq_cmd_queue {
 			dao.pstmt().setString(5, str[4]);
 			dao.pstmt().setString(6, str[5]);
 			dao.pstmt().setString(7, str[6]);
+			dao.pstmt().setString(8, str[7]);
 			/* 조회한 콜로그의 일 발송량 갱신 */
 			dao.pstmt().executeUpdate();
 
@@ -1209,4 +1222,101 @@ public class Prq_cmd_queue {
 			dao.closePstmt();
 		}
     }	
+
+	/**
+	 *  조회한 cdr 정보 발신으로 갱신
+	 *
+	 * @author Taebu Moon <mtaebu@gmail.com>
+	 * @param string $table 게시판 테이블
+	 * @param string $id 게시물번호
+	 * @return array
+	 */
+	private static void set_sendcdr(String[] str)
+    {
+		//select * from prq_cdr where cd_date='2017-01-11 10:06:54' and cd_id='0314348635@naver.com' and cd_port='0' and cd_callerid='01055599880';
+		/*
+		$sql = "UPDATE prq_cdr SET cd_state=1 WHERE cd_state=0 and cd_callerid like '01%';";
+
+		$sql = "UPDATE prq_cdr SET cd_state=2 WHERE cd_state=0 and cd_callerid not like '01%';";
+		 */
+		StringBuilder sb = new StringBuilder();
+		MyDataObject dao = new MyDataObject();
+		
+		if(checkPattern("phone",str[3])){
+			sb.append("UPDATE prq_cdr SET cd_state=1 ");
+			sb.append("WHERE cd_state=0 ");
+			sb.append("and cd_date=? ");
+			sb.append("and cd_id=? ");
+			sb.append("and cd_port=? ");
+			sb.append("and cd_callerid=?; ");
+		}else{
+			sb.append("UPDATE prq_cdr SET cd_state=2 ");
+			sb.append("WHERE cd_state=0 ");
+			sb.append("and cd_date=? ");
+			sb.append("and cd_id=? ");
+			sb.append("and cd_port=? ");
+			sb.append("and cd_callerid=?; ");
+		}
+		try {
+			dao.openPstmt(sb.toString());
+			dao.pstmt().setString(1, str[0]);
+			dao.pstmt().setString(2, str[1]);
+			dao.pstmt().setString(3, str[2]);
+			dao.pstmt().setString(4, str[3]);
+			/* 조회한 콜로그의 일 발송량 갱신 */
+			dao.pstmt().executeUpdate();
+		} catch (SQLException e) {
+			Utils.getLogger().warning(e.getMessage());
+			DBConn.latest_warning = "ErrPOS025";
+			e.printStackTrace();
+		}
+		catch (Exception e) {
+			Utils.getLogger().warning(e.getMessage());
+			Utils.getLogger().warning(Utils.stack(e));
+			DBConn.latest_warning = "ErrPOS026";
+		}
+		finally {
+			dao.closePstmt();
+		}
+    }
+
+
+	  /**
+	  * 정규식 패턴 검증
+	  * @param pattern
+	  * @param str
+	  * @return
+	  */
+	
+	 public static boolean checkPattern(String pattern, String str){
+	  boolean okPattern = false;
+	  String regex = null;
+	  
+	  pattern = pattern.trim();
+	  
+	  //숫자 체크
+	  if("num".equals(pattern)){
+	   regex = "^[0-9]*$";
+	  }
+	  
+	  //영문 체크
+	  
+	  //이메일 체크
+	  if("email".equals(pattern)){
+	   regex = "^[_a-z0-9-]+(.[_a-z0-9-]+)*@(?:\\w+\\.)+\\w+$";
+	  }
+	  
+	  //전화번호 체크
+	  if("tel".equals(pattern)){
+	   regex = "^\\d{2,3}-\\d{3,4}-\\d{4}$";
+	  }
+	  
+	  //휴대폰번호 체크
+	  if("phone".equals(pattern)){
+	   regex = "^01[016789]-?(\\d{3}|\\d{4})-?\\d{4}$";
+	  }
+	  //System.out.println(regex);
+	  okPattern = Pattern.matches(regex, str);
+	  return okPattern;
+	 }
 }
