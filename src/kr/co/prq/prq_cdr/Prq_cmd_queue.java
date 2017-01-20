@@ -15,6 +15,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.regex.Pattern;
 
+
 //import com.nostech.safen.SafeNo;
 
 /**
@@ -77,8 +78,12 @@ public class Prq_cmd_queue {
 		String[] mno_limit = new String[2];
 		
 		boolean chk_mms = true;
+		boolean is_hp = false;
+		
 		String black_list="";
-
+		Long startTime =0L;
+		Long endTime=0L;
+		Long totalTime=0L;
 		
 		//Utils.getLogger().info(black_list);
 		
@@ -97,9 +102,13 @@ public class Prq_cmd_queue {
 
 			sb.append("select * from prq_cdr  ");
 			sb.append("WHERE cd_state=0 ");
-			sb.append("AND cd_callerid LIKE '01%';");
+			sb.append("limit 1 ;");
 			
 			try {
+
+					startTime = System.currentTimeMillis();
+
+
 				dao.openPstmt(sb.toString());
 
 				dao.setRs(dao.pstmt().executeQuery());
@@ -117,7 +126,11 @@ public class Prq_cmd_queue {
 					
 					PRQ_CDR.heart_beat = 1;
 					
+					String hist_table = DBConn.isExistTableYYYYMM();
+					//set_hist(hist_table);
+					//del_hist();
 					
+					is_hp=checkPattern("phone",dao.rs().getString("cd_callerid"));
 					/*	String cd_date 날짜정보, */
 					cd_date=chkValue(dao.rs().getString("cd_date"));
 					/*	String cd_id 아이디  */
@@ -344,7 +357,7 @@ public class Prq_cmd_queue {
 					message=message.replaceAll("\\#\\{homepage\\}","http://prq.co.kr/prq/page/"+store_info[0]);
 					//msg=str_replace("#{st_tel}",phone_format(st_tel_1),$msg);
 					message=message.replaceAll("\\#\\{st\\_tel\\}",store_info[3]);
-					Utils.getLogger().info("message : "+message);
+					//Utils.getLogger().info("message : "+message);
 					//echo $msg;
 					
 
@@ -366,18 +379,24 @@ public class Prq_cmd_queue {
 						{
 							//$li->cd_hp=$st->st_hp_1;
 							cd_hp= st_hp_1;
+							cd_tel= st_tel_1;
 						}
-						gcm_log[0]=mms_title;
-						gcm_log[1]=message;
-						gcm_log[2]=cd_callerid;
-						gcm_log[3]=cd_hp;
-						gcm_log[4]=img_url;
-						gcm_log[5]=result_msg;
-						gcm_log[6]=gc_ipaddr;
-						gcm_log[7]=st_no;
-						set_gcm_log(gcm_log);
 						
+						if(is_hp)
+						{
+							gcm_log[0]=mms_title;
+							gcm_log[1]=message;
+							gcm_log[2]=cd_callerid;
+							gcm_log[3]=cd_hp;
+							gcm_log[4]=img_url;
+							gcm_log[5]=result_msg;
+							gcm_log[6]=gc_ipaddr;
+							gcm_log[7]=st_no;
+							set_gcm_log(gcm_log);
+							chk_mms=true;
+						}
 						chk_mms=false;
+						
 					}
 
 
@@ -425,16 +444,19 @@ public class Prq_cmd_queue {
 						{
 							cd_hp=st_hp_1;
 						}
-
-						gcm_log[0]=mms_title;
-						gcm_log[1]=message;
-						gcm_log[2]=cd_callerid;
-						gcm_log[3]=cd_hp;
-						gcm_log[4]=img_url;
-						gcm_log[5]=result_msg;
-						gcm_log[6]=gc_ipaddr;
-						gcm_log[7]=st_no;
-						set_gcm_log(gcm_log);
+						
+						if(is_hp)
+						{
+							gcm_log[0]=mms_title;
+							gcm_log[1]=message;
+							gcm_log[2]=cd_callerid;
+							gcm_log[3]=cd_hp;
+							gcm_log[4]=img_url;
+							gcm_log[5]=result_msg;
+							gcm_log[6]=gc_ipaddr;
+							gcm_log[7]=st_no;
+							set_gcm_log(gcm_log);
+						}
 						/* 2016-11-22 (화)
 						* https://github.com/Taebu/prq/issues/57
 						* 조정흠씨 자체 개발로 인해 중복 제한 비활성화
@@ -453,17 +475,18 @@ public class Prq_cmd_queue {
 						{
 							cd_hp=st_hp_1;
 						}
-
-						gcm_log[0]=mms_title;
-						gcm_log[1]=message;
-						gcm_log[2]=cd_callerid;
-						gcm_log[3]=cd_hp;
-						gcm_log[4]=img_url;
-						gcm_log[5]=result_msg;
-						gcm_log[6]=gc_ipaddr;
-						gcm_log[7]=st_no;
-						set_gcm_log(gcm_log);
-						
+						if(is_hp)
+						{
+							gcm_log[0]=mms_title;
+							gcm_log[1]=message;
+							gcm_log[2]=cd_callerid;
+							gcm_log[3]=cd_hp;
+							gcm_log[4]=img_url;
+							gcm_log[5]=result_msg;
+							gcm_log[6]=gc_ipaddr;
+							gcm_log[7]=st_no;
+							set_gcm_log(gcm_log);
+						}
 						chk_mms=false;
 					}		
 
@@ -475,7 +498,7 @@ public class Prq_cmd_queue {
 					* - 수신거부 중복, 150건 제한 혹은 설정한 일수 제한 아닌 경우만
 					* - $chk_mms = true;
 					*********************************************************************************/
-					if(chk_mms)
+					if(chk_mms&&is_hp)
 					{
 						/********************************************************************************
 						* 10. void set_gcm
@@ -536,7 +559,7 @@ public class Prq_cmd_queue {
 						 while ((buffer = in.readLine()) != null) {
 							 bufferHtml += buffer;
 						}
-						Utils.getLogger().info(bufferHtml);
+						//Utils.getLogger().info(bufferHtml);
 						in.close();
 
 					}
@@ -550,6 +573,8 @@ public class Prq_cmd_queue {
 					cdr_info[1]=cd_id;
 					cdr_info[2]=cd_port;
 					cdr_info[3]=cd_callerid;
+					cdr_info[4]=cd_hp;
+					cdr_info[5]=cd_tel;
 					set_sendcdr(cdr_info);
 				    
 					
@@ -1244,19 +1269,20 @@ public class Prq_cmd_queue {
 		
 		if(checkPattern("phone",str[3])){
 			sb.append("UPDATE prq_cdr SET cd_state=1 ");
-			sb.append("WHERE cd_state=0 ");
-			sb.append("and cd_date=? ");
-			sb.append("and cd_id=? ");
-			sb.append("and cd_port=? ");
-			sb.append("and cd_callerid=?; ");
+		}else if(!checkPattern("phone",str[3])){
+			sb.append("UPDATE prq_cdr SET cd_state=2 ");
+		}else if(str[4].equals("")){
+			sb.append("UPDATE prq_cdr SET cd_state=3 ");
+		}else if(str[5].equals("")){
+			sb.append("UPDATE prq_cdr SET cd_state=4 ");
 		}else{
 			sb.append("UPDATE prq_cdr SET cd_state=2 ");
-			sb.append("WHERE cd_state=0 ");
-			sb.append("and cd_date=? ");
-			sb.append("and cd_id=? ");
-			sb.append("and cd_port=? ");
-			sb.append("and cd_callerid=?; ");
 		}
+		sb.append("WHERE cd_state=0 ");
+		sb.append("and cd_date=? ");
+		sb.append("and cd_id=? ");
+		sb.append("and cd_port=? ");
+		sb.append("and cd_callerid=?; ");			
 		try {
 			dao.openPstmt(sb.toString());
 			dao.pstmt().setString(1, str[0]);
@@ -1264,6 +1290,9 @@ public class Prq_cmd_queue {
 			dao.pstmt().setString(3, str[2]);
 			dao.pstmt().setString(4, str[3]);
 			/* 조회한 콜로그의 일 발송량 갱신 */
+			
+			
+			dao.pstmt().executeUpdate();
 			dao.pstmt().executeUpdate();
 		} catch (SQLException e) {
 			Utils.getLogger().warning(e.getMessage());
@@ -1319,4 +1348,83 @@ public class Prq_cmd_queue {
 	  okPattern = Pattern.matches(regex, str);
 	  return okPattern;
 	 }
+
+		/**
+		 * set_hist
+		 *
+		 * @author Taebu Moon <mtaebu@gmail.com>
+		 * @param string $table 게시판 테이블
+		 * @param string $id 게시물번호
+		 * @return array
+		 */
+	 /**
+	  *  set_hist
+	  * @param historytable
+	  * @return void
+	  */
+		private static void set_hist(String historytable)
+	    {
+			StringBuilder sb = new StringBuilder();
+
+			MyDataObject dao = new MyDataObject();
+
+			sb.append("insert into "+historytable+" select * from prq_cdr where cd_state in (1,2,3,4)");// 처리가
+			try {
+				dao.openPstmt(sb.toString());
+				//dao.pstmt().setString(1, historytable);
+				/* 조회한 콜로그의 일 발송량 갱신 */
+				dao.pstmt().executeUpdate();
+							
+			} catch (SQLException e) {
+				Utils.getLogger().warning(e.getMessage());
+				DBConn.latest_warning = "ErrPOS023";
+				e.printStackTrace();
+			}
+			catch (Exception e) {
+				Utils.getLogger().warning(e.getMessage());
+				Utils.getLogger().warning(Utils.stack(e));
+				DBConn.latest_warning = "ErrPOS024";
+			}
+			finally {
+				dao.closePstmt();
+			}
+	    }	
+
+		
+		/**
+		 * set_hist
+		 *
+		 * @author Taebu Moon <mtaebu@gmail.com>
+		 * @param string $table 게시판 테이블
+		 * @param string $id 게시물번호
+		 * @return array
+		 */
+		private static void del_hist()
+	    {
+			StringBuilder sb = new StringBuilder();
+
+			MyDataObject dao = new MyDataObject();
+					
+			sb.append("delete from prq_cdr where cd_state in (1,2,3,4)");// 처리가 진행중인 것은 지우지 않는다. 
+			try {
+				dao.openPstmt(sb.toString());
+				/* 조회한 콜로그의 일 발송량 갱신 */
+				dao.pstmt().executeUpdate();
+
+							
+			} catch (SQLException e) {
+				Utils.getLogger().warning(e.getMessage());
+				DBConn.latest_warning = "ErrPOS023";
+				e.printStackTrace();
+			}
+			catch (Exception e) {
+				Utils.getLogger().warning(e.getMessage());
+				Utils.getLogger().warning(Utils.stack(e));
+				DBConn.latest_warning = "ErrPOS024";
+			}
+			finally {
+				dao.closePstmt();
+			}
+	    }	
+
 }
