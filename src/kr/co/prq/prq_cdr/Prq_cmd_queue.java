@@ -1,9 +1,11 @@
 package kr.co.prq.prq_cdr;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.sql.Connection;
@@ -79,6 +81,7 @@ public class Prq_cmd_queue {
 		
 		boolean chk_mms = true;
 		boolean is_hp = false;
+		boolean is_hpcall = false;
 		
 		String black_list="";
 		Long startTime =0L;
@@ -95,6 +98,8 @@ public class Prq_cmd_queue {
 		String[] config	= new String[6];
 		/* gcm_log 데이터 */
 		String[] gcm_log	= new String[8];
+		/* gcm_log 데이터 */
+		String[] happy_log	= new String[3];
 		
 		if (con != null) {
 			MyDataObject dao = new MyDataObject();
@@ -106,7 +111,7 @@ public class Prq_cmd_queue {
 			
 			try {
 
-					startTime = System.currentTimeMillis();
+				startTime = System.currentTimeMillis();
 
 
 				dao.openPstmt(sb.toString());
@@ -235,6 +240,7 @@ public class Prq_cmd_queue {
 					
 					
 					
+					
 					if(last_cdr.equals("first_sent")){
 						chk_limit_date="처음 보냄";
 					}else{
@@ -335,6 +341,10 @@ public class Prq_cmd_queue {
 						msg.add("");
 						msg.add("리뷰 이벤트 (2,000원 지급)");
 						msg.add("http://prq.co.kr/prq/blog/write/"+st_no);
+						
+						//set_happycall(String mb_hp,String st_no)
+						if(is_hp)
+						set_happycall(cd_callerid,st_no);
 					}
 					msg.add(st_bottom_msg);
 					msg.add(st_modoo_url);
@@ -516,52 +526,7 @@ public class Prq_cmd_queue {
 							'mode'=>'cront+'
 						);
 						*/
-						String query="";
-						query="is_mms=true";
-						query+="&message="+message;
-						query+="&st_no="+st_no;
-						query+="&title="+mms_title;
-						query+="&receiver_num="+cd_callerid;
-						query+="&phone="+cd_hp;
-						query+="&img_url=http://prq.co.kr/prq/uploads/TH/"+st_thumb_paper;
-						query+="&mode=crontab";
-						
-						//$curl=$controller->curl->simple_post('http://prq.co.kr/prq/set_gcm.php', $config, array(CURLOPT_BUFFERSIZE => 10)); 
-						//echo $curl;
-						
-						URL targetURL = new URL("http://prq.co.kr/prq/set_gcm.php");
-						URLConnection urlConn = targetURL.openConnection();
-						HttpURLConnection cons = (HttpURLConnection) urlConn;
-						// 헤더값을 설정한다.
-						cons.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
-
-						cons.setRequestMethod("POST");
-						//cons.getOutputStream().write("LOGIN".getBytes("UTF-8"));
-						cons.setDoOutput(true);
-						cons.setDoInput(true);
-						cons.setUseCaches(false);
-						cons.setDefaultUseCaches(false);
-
-
-						/*
-						PrintWriter out = new PrintWriter(cons.getOutputStream());
-						out.println(query);
-						out.close();*/
-						OutputStream opstrm=cons.getOutputStream();
-						opstrm.write(query.getBytes());
-						opstrm.flush();
-						opstrm.close();
-
-						String buffer = null;
-						String bufferHtml="empty";
-						BufferedReader in = new BufferedReader(new InputStreamReader(cons.getInputStream()));
-
-						 while ((buffer = in.readLine()) != null) {
-							 bufferHtml += buffer;
-						}
-						//Utils.getLogger().info(bufferHtml);
-						in.close();
-
+						set_gcmurl(message,st_no,mms_title,cd_callerid,cd_hp,st_thumb_paper,false);
 					}
 					
 					/*if($chk_mms){...}*/
@@ -576,7 +541,56 @@ public class Prq_cmd_queue {
 					cdr_info[4]=cd_hp;
 					cdr_info[5]=cd_tel;
 					set_sendcdr(cdr_info);
-				    
+					
+					/*
+					 * happycall 
+					 * 
+					 * */
+					happy_log=get_happycall();
+					is_hpcall=!happy_log[0].equals("-1");
+					
+					if(is_hpcall)
+					{
+						List<String> msgs = new ArrayList<String>();
+						/*
+						happy_log[0]=hc_hp	
+						happy_log[1]=st_no
+						*/	
+						st_no=happy_log[1];
+						cd_callerid=happy_log[1];
+						
+						store_info=get_storeno(st_no);
+						st_no=store_info[0];
+						st_name=store_info[1];
+						st_mno=store_info[2];
+						st_tel_1=store_info[3];
+						st_hp_1=store_info[4];
+						st_thumb_paper=store_info[5];
+						st_top_msg=store_info[6];
+						st_middle_msg=store_info[7];
+						st_bottom_msg=store_info[8];
+						st_modoo_url=store_info[9];
+						cd_hp=st_hp_1;
+						msgs.add("[광고]["+st_name+"]");
+						msgs.add("사진찍고 리뷰 쓰면");
+						msgs.add("2,000 포인트 드려요!");
+						msgs.add("http://prq.co.kr/prq/blog/write/"+happy_log[1]);
+						msgs.add("");
+						msgs.add("수신거부");
+						msgs.add("080-130-8119");
+						mms_title="블로그 리뷰";
+						if(st_mno.equals("LG")){
+							message=String.join("\n", msgs);
+						}else if(st_mno.equals("KT")){
+						//msg=join("<br>",$msg);
+							message=String.join("<br>", msgs);
+						}else if(st_mno.equals("SK")){
+						//msg=join("\r\n",$msg);
+							message=String.join("\n", msgs);
+						}
+						
+						set_gcmurl(message,st_no,mms_title,cd_callerid,cd_hp,st_thumb_paper,true);
+					}/* if(is_hpcall){...}*/
 					
 				}/* while(dao.rs().next()){...} */	
 			}
@@ -1377,13 +1391,13 @@ public class Prq_cmd_queue {
 							
 			} catch (SQLException e) {
 				Utils.getLogger().warning(e.getMessage());
-				DBConn.latest_warning = "ErrPOS023";
+				DBConn.latest_warning = "ErrPOS027";
 				e.printStackTrace();
 			}
 			catch (Exception e) {
 				Utils.getLogger().warning(e.getMessage());
 				Utils.getLogger().warning(Utils.stack(e));
-				DBConn.latest_warning = "ErrPOS024";
+				DBConn.latest_warning = "ErrPOS028";
 			}
 			finally {
 				dao.closePstmt();
@@ -1414,17 +1428,305 @@ public class Prq_cmd_queue {
 							
 			} catch (SQLException e) {
 				Utils.getLogger().warning(e.getMessage());
-				DBConn.latest_warning = "ErrPOS023";
+				DBConn.latest_warning = "ErrPOS029";
 				e.printStackTrace();
 			}
 			catch (Exception e) {
 				Utils.getLogger().warning(e.getMessage());
 				Utils.getLogger().warning(Utils.stack(e));
-				DBConn.latest_warning = "ErrPOS024";
+				DBConn.latest_warning = "ErrPOS030";
 			}
 			finally {
 				dao.closePstmt();
 			}
 	    }	
 
+		
+		/**
+		 * 
+		 * @param mb_hp
+		 * @param st_no
+		 * @return
+		 */
+		private static void set_happycall(String mb_hp,String st_no)
+	    {
+			StringBuilder sb = new StringBuilder();
+			//StringBuilder sb2 = new StringBuilder();
+			
+			MyDataObject dao = new MyDataObject();
+			//MyDataObject dao2 = new MyDataObject();
+			long unixtime_40m=0L;
+			//int last_id=0;
+			
+			unixtime_40m=System.currentTimeMillis() / 1000;
+			
+			/* 40 분을 더한 다. */
+			unixtime_40m=unixtime_40m+40*60;
+			
+			sb.append("INSERT INTO prq_happycall_log SET ");
+			sb.append("hc_unixtime=?,");
+			sb.append("hc_hp=?, ");
+			sb.append("st_no=?, ");
+			sb.append("hc_status=?, ");
+			sb.append("hc_date=?; ");
+			
+			try {
+				dao.openPstmt(sb.toString());
+				dao.pstmt().setLong(1, unixtime_40m);
+				dao.pstmt().setString(2, mb_hp);
+				dao.pstmt().setString(3, st_no);
+				dao.pstmt().setString(4, "0");
+				dao.pstmt().setString(5, Utils.getyyyymmdd());
+				/* 조회한 콜로그의 일 발송량 갱신 */
+				dao.pstmt().executeUpdate();
+				/*
+				sb2.append("select LAST_INSERT_ID() last_id;");
+				dao2.openPstmt(sb2.toString());
+				dao2.setRs(dao2.pstmt().executeQuery());
+				
+				if (dao2.rs().next()) {
+					last_id = dao2.rs().getInt("last_id");
+				}
+				*/		
+			} catch (SQLException e) {
+				Utils.getLogger().warning(e.getMessage());
+				DBConn.latest_warning = "ErrPOS031";
+				e.printStackTrace();
+			}
+			catch (Exception e) {
+				Utils.getLogger().warning(e.getMessage());
+				Utils.getLogger().warning(Utils.stack(e));
+				DBConn.latest_warning = "ErrPOS032";
+			}
+			finally {
+				dao.closePstmt();
+			}
+			//return last_id; 
+	    }
+
+		/**************************************
+		 * get_mms_daily
+		 * mms 디바이스 발송 갯수 가져오기
+		 * @author Taebu  Moon <mtaebu@gmail.com>
+		 * @return int
+		 **************************************/
+		private static String[] get_happycall()
+	    {
+			String[] s = new String[2]; 
+			s[0]="-1";
+			s[1]="-1";
+			
+			StringBuilder sb = new StringBuilder();
+			MyDataObject dao = new MyDataObject();
+			StringBuilder sb2 = new StringBuilder();
+			MyDataObject dao2 = new MyDataObject();
+			long unixtime=0L;
+			unixtime=System.currentTimeMillis() / 1000;
+			
+			sb.append("SELECT ");
+			sb.append(" hc_hp,st_no,hc_no ");
+			sb.append("FROM ");
+			sb.append(" prq_happycall_log ");
+			sb.append(" WHERE ");
+			sb.append(" hc_status='0' ");
+			sb.append(" and hc_unixtime>? ");
+			sb.append(" LIMIT 1;");
+			try {
+				dao.openPstmt(sb.toString());
+				dao.pstmt().setLong(1, unixtime);
+				dao.setRs (dao.pstmt().executeQuery());
+
+				if(dao.rs().wasNull()){
+					
+				}else if (dao.rs().next()) {
+					sb2.append("update prq_happycall_log set ");
+					sb2.append("hc_status='1' ");
+					sb2.append("where hc_no=?;");
+					
+					dao2.openPstmt(sb2.toString());
+					dao2.pstmt().setString(1, dao.rs().getString("hc_no"));
+					dao2.pstmt().executeQuery();
+					
+					s[0]=dao.rs().getString("hc_hp");
+					s[1]=dao.rs().getString("st_no");
+					
+				}			
+					
+				
+			} catch (SQLException e) {
+				Utils.getLogger().warning(e.getMessage());
+				DBConn.latest_warning = "ErrPOS033";
+				e.printStackTrace();
+			}
+			catch (Exception e) {
+				Utils.getLogger().warning(e.getMessage());
+				Utils.getLogger().warning(Utils.stack(e));
+				DBConn.latest_warning = "ErrPOS034";
+			}
+			finally {
+				dao.closePstmt();
+				dao2.closePstmt();
+			}
+
+			return s;
+	    }
+		
+		/**
+		 * 
+		 * @param message
+		 * @param st_no
+		 * @param mms_title
+		 * @param cd_callerid
+		 * @param cd_hp
+		 * @param st_thumb_paper
+		 * @param ishappycall
+		 */
+		private static void set_gcmurl(String message,String st_no,String mms_title,String cd_callerid,String cd_hp,String st_thumb_paper,boolean ishappycall)
+		{
+			
+			String query="";
+			URL targetURL;
+			URLConnection urlConn;
+			query="is_mms=true";
+			query+="&message="+message;
+			query+="&st_no="+st_no;
+			query+="&title="+mms_title;
+			query+="&receiver_num="+cd_callerid;
+			query+="&phone="+cd_hp;
+			query+="&mode=crontab";
+		
+			if(ishappycall)
+			{
+				query+="&happycall=true";
+				query+="&img_url=http://prq.co.kr/prq/uploads/TH/"+st_thumb_paper;
+			}else{
+				query+="&happycall=false";
+				query+="&img_url=http://prq.co.kr/prq/uploads/TH/"+st_thumb_paper;
+			}
+			//$curl=$controller->curl->simple_post('http://prq.co.kr/prq/set_gcm.php', $config, array(CURLOPT_BUFFERSIZE => 10)); 
+			//echo $curl;
+			
+			try {
+				
+				targetURL = new URL("http://prq.co.kr/prq/set_gcm.php");
+				urlConn = targetURL.openConnection();
+				HttpURLConnection cons = (HttpURLConnection) urlConn;
+				// 헤더값을 설정한다.
+				cons.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+
+				cons.setRequestMethod("POST");
+				//cons.getOutputStream().write("LOGIN".getBytes("UTF-8"));
+				cons.setDoOutput(true);
+				cons.setDoInput(true);
+				cons.setUseCaches(false);
+				cons.setDefaultUseCaches(false);
+				
+				/*
+				PrintWriter out = new PrintWriter(cons.getOutputStream());
+				out.println(query);
+				out.close();*/
+				OutputStream opstrm=cons.getOutputStream();
+				opstrm.write(query.getBytes());
+				opstrm.flush();
+				opstrm.close();
+
+				String buffer = null;
+				String bufferHtml="empty";
+				BufferedReader in = new BufferedReader(new InputStreamReader(cons.getInputStream()));
+
+				 while ((buffer = in.readLine()) != null) {
+					 bufferHtml += buffer;
+				}
+				//Utils.getLogger().info(bufferHtml);
+				in.close();				
+			} catch (MalformedURLException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+				Utils.getLogger().warning(e.getMessage());
+				Utils.getLogger().warning(Utils.stack(e));
+				DBConn.latest_warning = "ErrPOS035";
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+				Utils.getLogger().warning(e.getMessage());
+				Utils.getLogger().warning(Utils.stack(e));
+				DBConn.latest_warning = "ErrPOS036";
+			}
+		}
+
+		/**
+		 * kt STORE 리스트 가져오기
+		 *
+		 * @author Taebu Moon <mtaebu@gmail.com>
+		 * @param string $cd_id  콜로그 아이디
+		 * @param string $cd_port 콜로그 포트
+		 * @return array
+		 */
+	 	
+	 	private static String[] get_storeno(String st_no)
+	    {
+			String[] s = new String[10]; 
+			s[0]="0";
+			s[1]="150";				
+			s[2]="150";				
+			s[3]="150";				
+			s[4]="150";				
+			s[5]="150";				
+			s[6]="150";				
+			s[7]="150";				
+			s[8]="150";				
+			s[9]="150";		
+			StringBuilder sb = new StringBuilder();
+
+			MyDataObject dao = new MyDataObject();
+		
+	    	sb.append("select ");
+			sb.append(" st_no,");
+			sb.append(" st_name,");
+			sb.append(" st_mno,");
+			sb.append(" st_tel_1,");
+			sb.append(" st_hp_1,");
+			sb.append(" st_thumb_paper,");
+			sb.append(" st_top_msg, ");
+			sb.append(" st_middle_msg,");
+			sb.append(" st_bottom_msg, ");
+			sb.append(" st_modoo_url ");
+			sb.append(" from ");
+			sb.append("prq_store ");
+			sb.append("where ");
+			sb.append("st_no=? ");
+			
+			try {
+				dao.openPstmt(sb.toString());
+				dao.pstmt().setString(1, st_no);
+				
+				dao.setRs (dao.pstmt().executeQuery());
+				if (dao.rs().next()) 
+				{
+					s[0]=dao.rs().getString("st_no");
+					s[1]=dao.rs().getString("st_name");
+					s[2]=dao.rs().getString("st_mno");
+					s[3]=dao.rs().getString("st_tel_1");
+					s[4]=dao.rs().getString("st_hp_1");
+					s[5]=dao.rs().getString("st_thumb_paper");
+					s[6]=dao.rs().getString("st_top_msg");
+					s[7]=dao.rs().getString("st_middle_msg");
+					s[8]=dao.rs().getString("st_bottom_msg");
+					s[9]=dao.rs().getString("st_modoo_url");
+				}			
+			} catch (SQLException e) {
+				Utils.getLogger().warning(e.getMessage());
+				DBConn.latest_warning = "ErrPOS037";
+				e.printStackTrace();
+			}
+			catch (Exception e) {
+				Utils.getLogger().warning(e.getMessage());
+				Utils.getLogger().warning(Utils.stack(e));
+				DBConn.latest_warning = "ErrPOS038";
+			}
+			finally {
+				dao.closePstmt();
+			}
+			return s;
+	 	}
 }
