@@ -17,6 +17,8 @@ import java.util.Date;
 import java.util.List;
 import java.util.regex.Pattern;
 
+import com.mysql.jdbc.exceptions.MySQLIntegrityConstraintViolationException;
+
 
 //import com.nostech.safen.SafeNo;
 
@@ -557,7 +559,7 @@ public class Prq_cmd_queue {
 						happy_log[1]=st_no
 						*/	
 						st_no=happy_log[1];
-						cd_callerid=happy_log[1];
+						cd_callerid=happy_log[0];
 						
 						store_info=get_storeno(st_no);
 						st_no=store_info[0];
@@ -1448,7 +1450,7 @@ public class Prq_cmd_queue {
 		 * @param st_no
 		 * @return
 		 */
-		private static void set_happycall(String mb_hp,String st_no)
+		private static void set_happycall(String mb_hp,String st_no) throws MySQLIntegrityConstraintViolationException
 	    {
 			StringBuilder sb = new StringBuilder();
 			//StringBuilder sb2 = new StringBuilder();
@@ -1468,7 +1470,7 @@ public class Prq_cmd_queue {
 			sb.append("hc_hp=?, ");
 			sb.append("st_no=?, ");
 			sb.append("hc_status=?, ");
-			sb.append("hc_date=?; ");
+			sb.append("hc_date=? ");
 			
 			try {
 				dao.openPstmt(sb.toString());
@@ -1497,8 +1499,8 @@ public class Prq_cmd_queue {
 				Utils.getLogger().warning(e.getMessage());
 				Utils.getLogger().warning(Utils.stack(e));
 				DBConn.latest_warning = "ErrPOS032";
-			}
-			finally {
+				//com.mysql.jdbc.exceptions.jdbc4.MySQLIntegrityConstraintViolationException
+			}finally {
 				dao.closePstmt();
 			}
 			//return last_id; 
@@ -1521,6 +1523,8 @@ public class Prq_cmd_queue {
 			StringBuilder sb2 = new StringBuilder();
 			MyDataObject dao2 = new MyDataObject();
 			long unixtime=0L;
+			String hc_no="";
+			String hc_status="1";
 			unixtime=System.currentTimeMillis() / 1000;
 			
 			sb.append("SELECT ");
@@ -1528,28 +1532,30 @@ public class Prq_cmd_queue {
 			sb.append("FROM ");
 			sb.append(" prq_happycall_log ");
 			sb.append(" WHERE ");
-			sb.append(" hc_status='0' ");
-			sb.append(" and hc_unixtime>? ");
-			sb.append(" LIMIT 1;");
+			sb.append(" hc_status=? ");
+			sb.append(" and hc_unixtime<? ");
+			sb.append(" LIMIT 1");
 			try {
 				dao.openPstmt(sb.toString());
-				dao.pstmt().setLong(1, unixtime);
+				dao.pstmt().setString(1, "0");
+				dao.pstmt().setLong(2, unixtime);
 				dao.setRs (dao.pstmt().executeQuery());
 
 				if(dao.rs().wasNull()){
 					
 				}else if (dao.rs().next()) {
-					sb2.append("update prq_happycall_log set ");
-					sb2.append("hc_status='1' ");
-					sb2.append("where hc_no=?;");
-					
-					dao2.openPstmt(sb2.toString());
-					dao2.pstmt().setString(1, dao.rs().getString("hc_no"));
-					dao2.pstmt().executeQuery();
-					
+					hc_no=dao.rs().getString("hc_no");
 					s[0]=dao.rs().getString("hc_hp");
 					s[1]=dao.rs().getString("st_no");
 					
+					sb2.append("update prq_happycall_log set ");
+					sb2.append("hc_status=? ");
+					sb2.append("where hc_no=?;");
+					dao2.openPstmt(sb2.toString());
+					dao2.pstmt().setString(1, hc_status);
+					dao2.pstmt().setString(2, hc_no);
+					dao2.pstmt().executeUpdate();
+				
 				}			
 					
 				
