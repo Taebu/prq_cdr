@@ -24,7 +24,8 @@ import com.mysql.jdbc.exceptions.MySQLIntegrityConstraintViolationException;
 
 /**
  * prq_cdr 테이블 관련 객체
- * 2017-01-02 (목) 오전 10:42
+ * 2017-05-10 (수) 12:30
+ * 
  * @author Taebu
  *  
  */
@@ -79,11 +80,14 @@ public class Prq_cmd_queue {
 		int chk_cd_date=0;
 		int daily_mms_cnt=0;
 		int mm_daily_cnt=0;
+		int my_device_cnt=0;
 		String[] mno_limit = new String[2];
 		
 		boolean chk_mms = true;
 		boolean is_hp = false;
 		boolean is_hpcall = false;
+		/* 발송 제한 */
+		boolean is_set_limit = false;
 		
 		String black_list="";
 		Long startTime =0L;
@@ -94,7 +98,7 @@ public class Prq_cmd_queue {
 		/* 상점 정보 */
 		String[] store_info			= new String[10];
 		/* 콜로그 데이터 */
-		String[] cdr_info	= new String[6];
+		String[] cdr_info	= new String[7];
 		/* config 데이터 */
 		String[] config	= new String[6];
 		/* gcm_log 데이터 */
@@ -207,6 +211,8 @@ public class Prq_cmd_queue {
 					*********  ***********************************************************************/
 					mno_device_daily=get_mms_daily(cd_hp);
 					mm_daily_cnt=mno_device_daily;
+					
+					
 
 					/********************************************************************************
 					* 6-2. void set_cdr
@@ -380,6 +386,18 @@ public class Prq_cmd_queue {
 					img_url="http://prq.co.kr/prq/uploads/TH/"+st_thumb_paper;
 					//수신거부 여부 체크
 //					if(in_array(cd_callerid,black_arr))
+
+					my_device_cnt=cd_day_cnt+cd_device_day_cnt;
+					/*
+					 * 일 전송량 (cd_day_cnt)+			
+					기기 전송량 (cd_device_day_cnt);
+					
+					
+					설정 제한 갯수
+					*/
+					if(cd_day_limit>my_device_cnt){
+						is_set_limit=true;
+					}
 					
 					if(black_list.contains(cd_callerid))
 					{
@@ -408,6 +426,18 @@ public class Prq_cmd_queue {
 						}
 						chk_mms=false;
 						
+					}else if(is_set_limit){
+						/*gcm 로그 발생*/
+						result_msg= "발송제한초과";
+
+						if(cd_port.equals("0"))
+						{
+							//$li->cd_hp=$st->st_hp_1;
+							cd_hp= st_hp_1;
+							cd_tel= st_tel_1;
+						}
+						
+						chk_mms=false;
 					}
 
 
@@ -419,6 +449,8 @@ public class Prq_cmd_queue {
 					/* 일간 mms 발송건 prq 값 */
 					daily_mms_cnt+=cd_day_cnt;
 					
+					
+
 					/********************************************************************************
 					*
 					* 9-1. if($cd_date=="first_send"){...}
@@ -541,6 +573,8 @@ public class Prq_cmd_queue {
 					cdr_info[3]=cd_callerid;
 					cdr_info[4]=cd_hp;
 					cdr_info[5]=cd_tel;
+					/* 발송 제한 */
+					cdr_info[6]=is_set_limit?"limit":"";
 					set_sendcdr(cdr_info);
 					
 					/*
@@ -1293,6 +1327,8 @@ public class Prq_cmd_queue {
 			sb.append("UPDATE prq_cdr SET cd_state=3 ");
 		}else if(str[5].equals("")){
 			sb.append("UPDATE prq_cdr SET cd_state=4 ");
+		}else if(str[6].equals("limit")){
+			sb.append("UPDATE prq_cdr SET cd_state=5 ");
 		}else{
 			sb.append("UPDATE prq_cdr SET cd_state=2 ");
 		}
