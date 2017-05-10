@@ -205,6 +205,9 @@ public class Prq_cmd_queue {
 					********************************************************************************/
 					day_cnt=get_send_cnt(cd_hp);
 					
+					
+					
+					
 					/********************************************************************************
 					* 6-1. array get_mms_daily
 					* - mms_daily 정보 가져 오기
@@ -387,7 +390,7 @@ public class Prq_cmd_queue {
 					//수신거부 여부 체크
 //					if(in_array(cd_callerid,black_arr))
 
-					my_device_cnt=cd_day_cnt+cd_device_day_cnt;
+					my_device_cnt=mm_daily_cnt+cd_day_cnt+cd_device_day_cnt;
 					/*
 					 * 일 전송량 (cd_day_cnt)+			
 					기기 전송량 (cd_device_day_cnt);
@@ -395,9 +398,24 @@ public class Prq_cmd_queue {
 					
 					설정 제한 갯수
 					*/
-					if(cd_day_limit>my_device_cnt){
-						is_set_limit=true;
-					}
+					/*
+					System.out.println("st_name : "+st_name);
+					
+					
+					System.out.print("my_device_cnt: ");
+					System.out.print(day_cnt);
+					System.out.print("+");
+					System.out.print(mm_daily_cnt);
+					System.out.print(" = ");
+					System.out.print(my_device_cnt);
+					System.out.print("     cd_day_limit : ");
+					System.out.println(cd_day_limit);
+					*/
+					my_device_cnt=mm_daily_cnt+day_cnt;
+					//System.out.println("mn_dup_limit : last_cdr "+mn_dup_limit+" >"+last_cdr);
+					
+					is_set_limit=cd_day_limit<my_device_cnt;
+					
 					
 					if(black_list.contains(cd_callerid))
 					{
@@ -510,10 +528,13 @@ public class Prq_cmd_queue {
 					* 150건 제한
 					* prq_gcm_log 150건 제한 로그 발생
 					********************************************************************************/
-					}else if(daily_mms_cnt>mn_mms_limit){
+					//}else if(daily_mms_cnt>mn_mms_limit){
+					}
+					
+					if(is_set_limit){
 						/*gcm 로그 발생*/
-						result_msg= cd_day_cnt+"/"+mn_mms_limit+"건 제한";
-						
+						result_msg= my_device_cnt+"/"+cd_day_limit+"건 제한";
+						System.out.println(result_msg);
 						if(cd_port.equals("0"))
 						{
 							cd_hp=st_hp_1;
@@ -560,6 +581,7 @@ public class Prq_cmd_queue {
 						);
 						*/
 						set_gcmurl(message,st_no,mms_title,cd_callerid,cd_hp,st_thumb_paper,false);
+						 
 					}
 					
 					/*if($chk_mms){...}*/
@@ -576,6 +598,7 @@ public class Prq_cmd_queue {
 					/* 발송 제한 */
 					cdr_info[6]=is_set_limit?"limit":"";
 					set_sendcdr(cdr_info);
+					
 					
 					/*
 					 * happycall 
@@ -644,7 +667,7 @@ public class Prq_cmd_queue {
 				dao.closePstmt();
 		        endTime = System.currentTimeMillis();
 		        // 시간 출력
-		        Utils.getLogger().warning("##  소요시간(초.0f) : " + ( endTime - startTime )/1000.0f +"초");
+		        System.out.println("##  소요시간(초.0f) : " + ( endTime - startTime )/1000.0f +"초");
 			}
 			
 		}
