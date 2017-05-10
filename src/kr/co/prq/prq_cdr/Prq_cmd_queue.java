@@ -112,6 +112,8 @@ public class Prq_cmd_queue {
 
 			sb.append("select * from prq_cdr  ");
 			sb.append("WHERE cd_state=0 ");
+			sb.append(" order by cd_date ");
+			
 			sb.append("limit 15;");
 			
 			try {
