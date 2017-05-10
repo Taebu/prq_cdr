@@ -89,8 +89,7 @@ public class Prq_cmd_queue {
 		Long startTime =0L;
 		Long endTime=0L;
 		Long totalTime=0L;
-		
-		//Utils.getLogger().info(black_list);
+        
 		
 		/* 상점 정보 */
 		String[] store_info			= new String[10];
@@ -109,7 +108,7 @@ public class Prq_cmd_queue {
 
 			sb.append("select * from prq_cdr  ");
 			sb.append("WHERE cd_state=0 ");
-			sb.append("limit 1 ;");
+			sb.append("limit 15;");
 			
 			try {
 
@@ -609,6 +608,9 @@ public class Prq_cmd_queue {
 			}
 			finally {
 				dao.closePstmt();
+		        endTime = System.currentTimeMillis();
+		        // 시간 출력
+		        Utils.getLogger().warning("##  소요시간(초.0f) : " + ( endTime - startTime )/1000.0f +"초");
 			}
 			
 		}
