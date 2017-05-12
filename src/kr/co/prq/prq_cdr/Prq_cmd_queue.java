@@ -128,13 +128,15 @@ public class Prq_cmd_queue {
 				* 2-2. 리스트 출력 
 				* SELECT TIMESTAMPDIFF(DAY,'2009-05-18','2009-07-29');
 				***************************************************/
+				/****************************************************************************** 
+				* 1. 블랙 리스트 가져오기 
+				* 
+				******************************************************************************/
+				black_list=get_black();
+				
 				while(dao.rs().next()) 
 				{
-					/****************************************************************************** 
-					* 1. 블랙 리스트 가져오기 
-					* 
-					******************************************************************************/
-					black_list=get_black();
+
 					
 					PRQ_CDR.heart_beat = 1;
 					
@@ -668,6 +670,8 @@ public class Prq_cmd_queue {
 			finally {
 				dao.closePstmt();
 		        endTime = System.currentTimeMillis();
+		        /* 처리 완료 건 이동 */
+		        set_hist();
 		        // 시간 출력
 		        System.out.println("##  소요시간(초.0f) : " + ( endTime - startTime )/1000.0f +"초");
 			}
@@ -713,7 +717,7 @@ public class Prq_cmd_queue {
 		sb.append("SELECT  ");
 		sb.append(" cd_date ");
 		sb.append(" FROM ");
-		sb.append(" prq_cdr ");
+		sb.append(" prq_cdr_tmp ");
 		sb.append("WHERE cd_tel=? ");
 		sb.append("AND cd_hp=? ");
 		sb.append("AND cd_callerid=? ");		
@@ -1441,13 +1445,13 @@ public class Prq_cmd_queue {
 	  * @param historytable
 	  * @return void
 	  */
-		private static void set_hist(String historytable)
+		private static void set_hist()
 	    {
 			StringBuilder sb = new StringBuilder();
 
 			MyDataObject dao = new MyDataObject();
 
-			sb.append("insert into "+historytable+" select * from prq_cdr where cd_state in (1,2,3,4)");// 처리가
+			sb.append("insert into prq_cdr_tmp select * from prq_cdr where cd_state in (1,2,3,4,5);");// 처리가
 			try {
 				dao.openPstmt(sb.toString());
 				//dao.pstmt().setString(1, historytable);
@@ -1465,6 +1469,8 @@ public class Prq_cmd_queue {
 				DBConn.latest_warning = "ErrPOS028";
 			}
 			finally {
+				/* 처리된 건 지우기 */
+				del_hist();
 				dao.closePstmt();
 			}
 	    }	
@@ -1484,7 +1490,7 @@ public class Prq_cmd_queue {
 
 			MyDataObject dao = new MyDataObject();
 					
-			sb.append("delete from prq_cdr where cd_state in (1,2,3,4)");// 처리가 진행중인 것은 지우지 않는다. 
+			sb.append("delete from prq_cdr where cd_state in (1,2,3,4,5)");// 처리가 진행중인 것은 지우지 않는다. 
 			try {
 				dao.openPstmt(sb.toString());
 				/* 조회한 콜로그의 일 발송량 갱신 */
