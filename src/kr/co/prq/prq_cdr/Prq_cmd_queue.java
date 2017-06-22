@@ -348,7 +348,7 @@ public class Prq_cmd_queue {
 					is_hpcall=!happy_log[0].equals("-1");
 					result_msg= my_device_cnt+"/"+mn_mms_limit+"건 제한";
 					System.out.println(result_msg);
-					if(get_blog_yn(happy_log[1]).equals("on")&&is_hp&&is_release)
+					if(get_blog_yn(store_info[0]).equals("on")&&is_hp&&is_release)
 						set_happycall(cd_callerid,store_info[0]);
 					if(is_hpcall)
 					{
