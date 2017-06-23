@@ -40,6 +40,8 @@ public class Prq_cmd_queue {
 		String cd_date="",cd_id="",cd_port="",cd_callerid="",cd_calledid="",img_url="",result_msg="",mms_title="",cd_tel="",cd_hp="",message="",cd_name="",chk_limit_date="";				
 		/* 상점 정보*/
 		String st_no="",st_thumb_paper="",st_bottom_msg="",st_modoo_url="",black_list="";
+		/* happycall */
+		String hc_status="";
 		int cd_state=0,cd_day_cnt=0,cd_day_limit=0,cd_device_day_cnt=0,day_cnt=0,mno_device_daily=0,mn_mms_limit=0,mn_dup_limit=0,chk_cd_date=0,daily_mms_cnt=0,mm_daily_cnt=0,my_device_cnt=0;
 		String last_cdr="first_sent";		
 		String gc_ipaddr="123.142.52.91";
@@ -151,6 +153,7 @@ public class Prq_cmd_queue {
 						config[0]=cd_id;
 						config[1]=cd_calledid;
 						store_info=get_store_kt(config);
+						st_no=store_info[0];
 						cd_hp=store_info[4];
 						cd_tel=store_info[3];
 						
@@ -166,6 +169,7 @@ public class Prq_cmd_queue {
 						config[0]=cd_id;
 						config[1]=cd_port;
 						store_info=get_store(config);
+						st_no=store_info[0];
 					}
 					/* 6.  상점 정보 없음. */
 					if(store_info[1].equals("150"))
@@ -247,6 +251,7 @@ public class Prq_cmd_queue {
 					cdr_info[5]=cd_hp;
 					set_cdr(cdr_info);
 					cd_day_cnt=day_cnt;
+					
 					/* 오늘 기기에서 보낸 총 갯수 = 기기에서 보낸 mms + prq에서 보낸 mms 갯수*/
 					my_device_cnt=mm_daily_cnt+cd_day_cnt+cd_device_day_cnt; 
 					is_set_limit=my_device_cnt>=mn_mms_limit;
@@ -330,7 +335,7 @@ public class Prq_cmd_queue {
 					if(chk_mms&&is_hp&&is_release)
 					{
 						//set_gcmurl(message,st_no,mms_title,cd_callerid,cd_hp,st_thumb_paper,false);
-						set_gcmurl(message,store_info[0],store_info[6],cd_callerid,cd_hp,store_info[5],false);
+						set_gcmurl(message,st_no,store_info[6],cd_callerid,cd_hp,store_info[5],false);
 					}
 	
 					/* 발송 처리 핸드폰 일반 번호 */
@@ -344,13 +349,23 @@ public class Prq_cmd_queue {
 					System.out.println("전송");
 					
 					happy_log=get_happycall();
-					/* [01086033821, 331] */
+					/* [01086033821(hc_hp), 331(st_no), (hc_no)] */
+					store_info=get_storeno(happycall_info[1]);
+					
+					
+					is_set_limit=is_limit(store_info[4]);
+					hc_status=is_set_limit?"2":"1";
+					
+					set_happycall_log(hc_status,happy_log[2]);
 					is_hpcall=!happy_log[0].equals("-1");
+					
+					
+					
 					result_msg= my_device_cnt+"/"+mn_mms_limit+"건 제한";
 					System.out.println(result_msg);
-					if(get_blog_yn(store_info[0]).equals("on")&&is_hp&&is_release)
-						set_happycall(cd_callerid,store_info[0]);
-					if(is_hpcall)
+					if(get_blog_yn(st_no).equals("on")&&is_hp&&is_release)
+						set_happycall(cd_callerid,st_no);
+					if(is_hpcall&&!is_set_limit)
 					{
 						happycall_info[0]=happy_log[0];
 						happycall_info[1]=happy_log[1];
@@ -919,7 +934,7 @@ public class Prq_cmd_queue {
 		sql+="where ";
 		sql+="pv_code='5002' ";
 		sql+="and pv_no='"+st_no+"';";
-
+ 
 		try {
 			dao.openPstmt(sql);
 			dao.setRs(dao.pstmt().executeQuery());
@@ -1099,6 +1114,8 @@ public class Prq_cmd_queue {
 	  return okPattern;
 	 }
 
+	 
+	 
 	/**
 	 * set_hist
 	 * @author Taebu Moon <mtaebu@gmail.com>
@@ -1244,17 +1261,14 @@ public class Prq_cmd_queue {
 		 **************************************/
 		private static String[] get_happycall()
 	    {
-			String[] s = new String[2]; 
+			String[] s = new String[3]; 
 			s[0]="-1";
 			s[1]="-1";
+			s[2]="-1";
 			
 			StringBuilder sb = new StringBuilder();
 			MyDataObject dao = new MyDataObject();
-			StringBuilder sb2 = new StringBuilder();
-			MyDataObject dao2 = new MyDataObject();
 			long unixtime=0L;
-			String hc_no="";
-			String hc_status="1";
 			unixtime=System.currentTimeMillis() / 1000;
 			
 			sb.append("SELECT ");
@@ -1274,21 +1288,10 @@ public class Prq_cmd_queue {
 				if(dao.rs().wasNull()){
 					
 				}else if (dao.rs().next()) {
-					hc_no=dao.rs().getString("hc_no");
 					s[0]=dao.rs().getString("hc_hp");
 					s[1]=dao.rs().getString("st_no");
-					
-					sb2.append("update prq_happycall_log set ");
-					sb2.append("hc_status=? ");
-					sb2.append("where hc_no=?;");
-					dao2.openPstmt(sb2.toString());
-					dao2.pstmt().setString(1, hc_status);
-					dao2.pstmt().setString(2, hc_no);
-					dao2.pstmt().executeUpdate();
-				
-				}			
-					
-				
+					s[2]=dao.rs().getString("hc_no");				
+				}						
 			} catch (SQLException e) {
 				Utils.getLogger().warning(e.getMessage());
 				DBConn.latest_warning = "ErrPOS033";
@@ -1301,9 +1304,7 @@ public class Prq_cmd_queue {
 			}
 			finally {
 				dao.closePstmt();
-				dao2.closePstmt();
 			}
-
 			return s;
 	    }
 		
@@ -1339,51 +1340,7 @@ public class Prq_cmd_queue {
 				query+="&happycall=false";
 				query+="&img_url=http://prq.co.kr/prq/uploads/TH/"+st_thumb_paper;
 			}
-			//$curl=$controller->curl->simple_post('http://prq.co.kr/prq/set_gcm.php', $config, array(CURLOPT_BUFFERSIZE => 10)); 
-			//echo $curl;
-			/*
-			 * 
-			 * 
 
-if($mode=="crontab")
-{
-$is_happycall=false;
-if($happycall==true){
-$is_happycall=$happycall;
-}
-$messages = array( 
-	"title" =>$title,
-	"message" =>$message,
-	"is_mms" =>$is_mms,
-	"receiver_num" =>$receiver_num,
-	"img_url" =>$img_url,
-	"happycall" =>$is_happycall
-);
-$json=array();
-$push= json_decode($gcm->send_notification($registration_ids, $messages));
-$p_temp=isset($push->results[0]->message_id)?$push->results[0]->message_id:"";
-$result= (strpos($p_temp,"0:")!==false)?true:false;
-$result_msg= ($result)?"전달 성공":"전송 실패";
-$gc_ipaddr='123.142.52.91';
-$sql=array();
-$sql[]="INSERT INTO `prq_gcm_log` SET ";
-$sql[]="gc_subject='".$title."',";
-$sql[]="gc_content='".$message."',";
-$sql[]="gc_ismms='".$is_mms."',";
-$sql[]="gc_receiver='".$receiver_num."',";
-$sql[]="gc_sender='".$phone."',";
-$sql[]="gc_imgurl='".$img_url."',";
-$sql[]="gc_result='".$result_msg."',";
-$sql[]="gc_ipaddr='".$gc_ipaddr."',";
-$sql[]="gc_stno='".$st_no."',";
-$sql[]="gc_datetime=now();";
-$result=mysql_query(join("",$sql));
-$json=array();
-$json['success']=$result;
-//$json['sql']=join("",$sql);
-
-echo json_encode($json);
-			 * */
 			try {
 				
 				targetURL = new URL("http://prq.co.kr/prq/set_gcm.php");
@@ -1519,11 +1476,12 @@ echo json_encode($json);
 	    {
 			List<String> msgs = new ArrayList<String>();
 			String message="";
-			String result_msg= "";
+			
 			boolean chk_mms =false;
-			String[] store_info	= new String[10];
-			store_info=get_storeno(happycall_info[1]);
+			String[] store_info=get_storeno(happycall_info[1]);
 			try {
+				if(!is_set_limit)
+				{
 				msgs.add("[광고]["+store_info[1]+"]");
 				msgs.add("사진찍고 리뷰 쓰면");
 				msgs.add("2,000 포인트 드려요!");
@@ -1540,6 +1498,7 @@ echo json_encode($json);
 					message=String.join("<br>", msgs);
 				}
 				set_gcmurl(message,store_info[0],"블로그 리뷰", happycall_info[0],store_info[4],store_info[5],true);
+				}
 			}catch (Exception e) {
 				Utils.getLogger().warning(e.getMessage());
 				Utils.getLogger().warning(Utils.stack(e));
@@ -1591,4 +1550,105 @@ echo json_encode($json);
 			
 			return message;
 	    }	
+		
+		public static boolean is_limit(String cd_hp)
+		{
+			boolean is_set_limit=false;
+			
+			String mno_limit[]=get_mno_limit(cd_hp);
+			int mn_mms_limit=Integer.parseInt(mno_limit[0]);
+			//int mn_dup_limit=Integer.parseInt(mno_limit[1]);
+			
+			
+			/* 오늘 기기에서 보낸 총 갯수 = 기기에서 보낸 mms + prq에서 보낸 mms 갯수*/
+			int my_device_cnt=get_send_cnt(cd_hp)+get_device_cnt(cd_hp);
+			if(mn_mms_limit==0){
+				is_set_limit=false;
+			}else{
+				is_set_limit=my_device_cnt>=mn_mms_limit;	
+			}
+			
+			return is_set_limit; 
+		}
+
+		/**
+		 * get_device_cnt
+		 * prq_cdr_tmp 에서 당일 핸드폰에서 수동으로 전송한 갯수를 가져온다.   
+		 * @param mb_hp
+		 * @return int
+		 */
+		private static int get_device_cnt(String mb_hp){
+			int retVal = 0;
+			StringBuilder sb = new StringBuilder();
+			MyDataObject dao = new MyDataObject();
+			
+			sb.append("select cd_device_day_cnt cnt FROM `prq_cdr_tmp`");
+			sb.append(" where cd_hp=? ");
+			sb.append("and date(cd_date)=date(now()) ");
+			sb.append("order by cd_device_day_cnt desc ");
+			sb.append("limit 1;");
+			try {
+				dao.openPstmt(sb.toString());
+				dao.pstmt().setString(1, mb_hp);
+				
+				dao.setRs (dao.pstmt().executeQuery());
+				
+				if (dao.rs().next()) {
+					retVal = dao.rs().getInt("cnt");
+				}			
+			} catch (SQLException e) {
+				Utils.getLogger().warning(e.getMessage());
+				DBConn.latest_warning = "ErrPOS040";
+				e.printStackTrace();
+			}
+			catch (Exception e) {
+				Utils.getLogger().warning(e.getMessage());
+				Utils.getLogger().warning(Utils.stack(e));
+				DBConn.latest_warning = "ErrPOS041";
+			}
+			finally {
+				dao.closePstmt();
+			}
+			return retVal;
+		}
+
+
+		/**
+		 * 금일 보낸 발송 갯수 갱신
+		 *
+		 * @author Taebu Moon <mtaebu@gmail.com>
+		 * @param string $table 게시판 테이블
+		 * @param string $id 게시물번호
+		 * @return array
+		 */
+		private static void set_happycall_log(String hc_status,String hc_no)
+	    {
+			StringBuilder sb = new StringBuilder();
+			MyDataObject dao = new MyDataObject();
+			
+			sb.append("update prq_happycall_log set ");
+			sb.append("hc_status=? ");
+			sb.append("where hc_no=?;");
+			
+			try {
+				dao.openPstmt(sb.toString());
+				
+				dao.pstmt().setString(1, hc_status);
+				dao.pstmt().setString(2, hc_no);
+				dao.pstmt().executeUpdate();
+							
+			} catch (SQLException e) {
+				Utils.getLogger().warning(e.getMessage());
+				DBConn.latest_warning = "ErrPOS042";
+				e.printStackTrace();
+			}
+			catch (Exception e) {
+				Utils.getLogger().warning(e.getMessage());
+				Utils.getLogger().warning(Utils.stack(e));
+				DBConn.latest_warning = "ErrPOS043";
+			}
+			finally {
+				dao.closePstmt();
+			}
+	    }
 }
