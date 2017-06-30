@@ -24,7 +24,7 @@ import com.mysql.jdbc.exceptions.MySQLIntegrityConstraintViolationException;
 /**
  * prq_cdr 테이블 관련 객체
  * 2017-05-10 (수) 12:30
- * 
+ * 수정 2017-06-30 (금) 18:03:04  
  * @author Taebu
  *  
  */
@@ -48,7 +48,7 @@ public class Prq_cmd_queue {
 		String is_blogon="off";		
 		String[] mno_limit = new String[2];
 		boolean chk_mms = true,is_test = true;		
-		boolean is_hp = false,is_hpcall = false,is_set_limit = false;
+		boolean is_hp = false,is_shophp=false,is_hpcall = false,is_set_limit = false;
 		Long startTime=0L,endTime=0L,totalTime=0L;
 	
 		/* 상점 정보 */
@@ -170,6 +170,25 @@ public class Prq_cmd_queue {
 						config[1]=cd_port;
 						store_info=get_store(config);
 						st_no=store_info[0];
+					}
+					
+					is_shophp=checkPattern("phone",store_info[4]);
+					
+					/*2017-06-30 (금) 18:01:07 
+					 * 상점 사장 번호가 핸드폰 번호가 아님 */
+					if(!is_shophp)
+					{
+						//
+						result_msg="업체 사장번호가 아님";
+						cdr_info[0]=cd_date;
+						cdr_info[1]=cd_id;
+						cdr_info[2]=cd_port;
+						cdr_info[3]=cd_callerid;
+						cdr_info[4]="6";
+						set_sendcdr(cdr_info);
+						System.out.println(result_msg);
+						continue;					
+						
 					}
 					/* 6.  상점 정보 없음. */
 					if(store_info[1].equals("150"))
