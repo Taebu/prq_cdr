@@ -24,7 +24,7 @@ import com.mysql.jdbc.exceptions.MySQLIntegrityConstraintViolationException;
 /**
  * prq_cdr 테이블 관련 객체
  * 2017-05-10 (수) 12:30
- * 수정 2017-06-30 (금) 18:03:04  
+ * 
  * @author Taebu
  *  
  */
@@ -179,7 +179,7 @@ public class Prq_cmd_queue {
 					if(!is_shophp)
 					{
 						//
-						result_msg="업체 사장번호가 아님";
+						result_msg="업체 사장번호가 핸드폰이 아님";
 						cdr_info[0]=cd_date;
 						cdr_info[1]=cd_id;
 						cdr_info[2]=cd_port;
@@ -188,8 +188,8 @@ public class Prq_cmd_queue {
 						set_sendcdr(cdr_info);
 						System.out.println(result_msg);
 						continue;					
-						
 					}
+					
 					/* 6.  상점 정보 없음. */
 					if(store_info[1].equals("150"))
 					{
@@ -332,20 +332,7 @@ public class Prq_cmd_queue {
 					* prq_gcm_log 중복제한 로그 발생
 					********************************************************************************/
 					}
-					/*
-					if(mn_dup_limit>Integer.parseInt(last_cdr)){
-						//$result_msg= $cd_date."/".$get_mno_limit->mn_dup_limit."일 중복 제한";
-						result_msg= last_cdr+"/"+mn_dup_limit+"일 발송";
-						cdr_info[0]=cd_date;
-						cdr_info[1]=cd_id;
-						cdr_info[2]=cd_port;
-						cdr_info[3]=cd_callerid;
-						cdr_info[4]="7";
-						set_sendcdr(cdr_info);
-						System.out.println(result_msg);
-						continue;						
-					}
-					*/
+
 					/********************************************************************************
 					* 9-4. curl->simple_post('http://prq.co.kr/prq/set_gcm.php')
 					* - 수신거부 중복, 150건 제한 혹은 설정한 일수 제한 아닌 경우만
@@ -367,32 +354,32 @@ public class Prq_cmd_queue {
 					set_sendcdr(cdr_info);
 					System.out.println("전송");
 					
-					happy_log=get_happycall();
+					//happy_log=get_happycall();
 					/* [01086033821(hc_hp), 331(st_no), (hc_no)] */
-					store_info=get_storeno(happycall_info[1]);
+					//store_info=get_storeno(happycall_info[1]);
 					
 					
-					is_set_limit=is_limit(store_info[4]);
-					hc_status=is_set_limit?"2":"1";
+					//is_set_limit=is_limit(store_info[4]);
+					//hc_status=is_set_limit?"2":"1";
 					
-					set_happycall_log(hc_status,happy_log[2]);
-					is_hpcall=!happy_log[0].equals("-1");
+					//set_happycall_log(hc_status,happy_log[2]);
+					//is_hpcall=!happy_log[0].equals("-1");
 					
 					
 					
-					result_msg= my_device_cnt+"/"+mn_mms_limit+"건 제한";
-					System.out.println(result_msg);
-					if(get_blog_yn(st_no).equals("on")&&is_hp&&is_release)
-						set_happycall(cd_callerid,st_no);
-					if(is_hpcall&&!is_set_limit)
-					{
-						happycall_info[0]=happy_log[0];
-						happycall_info[1]=happy_log[1];
-						happycall_info[2]=Integer.toString(my_device_cnt);
-						happycall_info[3]=Integer.toString(mn_mms_limit);
-						set_happycall_mms(is_set_limit,is_hp,happycall_info);
-						System.out.println("happycall 전송");
-					}/* if(is_hpcall){...}*/
+					//result_msg= my_device_cnt+"/"+mn_mms_limit+"건 제한";
+					//System.out.println(result_msg);
+					//if(get_blog_yn(st_no).equals("on")&&is_hp&&is_release)
+					//	set_happycall(cd_callerid,st_no);
+					//if(is_hpcall&&!is_set_limit)
+					//{
+					//	happycall_info[0]=happy_log[0];
+					//	happycall_info[1]=happy_log[1];
+					//	happycall_info[2]=Integer.toString(my_device_cnt);
+					//	happycall_info[3]=Integer.toString(mn_mms_limit);
+					//	set_happycall_mms(is_set_limit,is_hp,happycall_info);
+					//	System.out.println("happycall 전송");
+					//}/* if(is_hpcall){...}*/
 				}/* while(dao.rs().next()){...} */	
 			}catch (SQLException e){
 				Utils.getLogger().warning(e.getMessage());
