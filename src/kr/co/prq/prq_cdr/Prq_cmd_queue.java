@@ -354,7 +354,7 @@ public class Prq_cmd_queue {
 					set_sendcdr(cdr_info);
 					System.out.println("전송");
 					
-					//happy_log=get_happycall();
+					happy_log=get_happycall();
 					/* [01086033821(hc_hp), 331(st_no), (hc_no)] */
 					//store_info=get_storeno(happycall_info[1]);
 					
@@ -544,11 +544,14 @@ public class Prq_cmd_queue {
 		StringBuilder sb = new StringBuilder();
 		MyDataObject dao = new MyDataObject();
 		
-		sb.append("SELECT count(*) cnt FROM `prq_mms_log` ");
-		sb.append("where mm_sender=? ");
-		sb.append("and left(mm_result,3)='200' ");
-		sb.append("and date(now())=date(mm_datetime);");
-		
+//		sb.append("SELECT count(*) cnt FROM `prq_mms_log` ");
+//		sb.append("where mm_sender=? ");
+//		sb.append("and left(mm_result,3)='200' ");
+//		sb.append("and date(now())=date(mm_datetime);");
+//		
+		sb.append("select ms_success cnt from prq_sf_log ");
+		sb.append("where ms_hp=? ");
+		sb.append("and ms_date=date(now());");
 		/*
 		sb.append("SELECT count(*) cnt ");
 		sb.append("FROM `prq_gcm_log` ");
