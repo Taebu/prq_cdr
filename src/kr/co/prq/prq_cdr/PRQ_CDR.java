@@ -38,6 +38,8 @@ public class PRQ_CDR {
 							// killme.txt파일을 지우고 시작한다.
 			doMainProcess();
 			DBConn.close();
+			DBConnCashq.close();
+			
 			CdrTrigger w = CdrTrigger.getInstance();
 			w.disconnectCallLogServer();
 			Utils.getLogger().info("PRQ_CDR program ended!");
@@ -77,7 +79,7 @@ public class PRQ_CDR {
 			synchronized (this_thread) {
 				while (doWork()) {
 					if (0 < heart_beat++) {
-						if (DBConn.getConnection() != null) {
+						if (DBConn.getConnection() != null||DBConnCashq.getConnection()!=null) {
 							Calendar nowTime = Calendar.getInstance();
 							if (pivotFutureTime == null) {
 								pivotFutureTime = nowTime;// 미래시간으로 셋팅됨
@@ -236,6 +238,7 @@ public class PRQ_CDR {
 		} else {
 			// /여기서 DB를 읽어서 작업한다.
 			Prq_cmd_queue.doMainProcess();
+			
 			return true;
 		}
 	}

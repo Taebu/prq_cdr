@@ -3,4 +3,8 @@
 /home/t3point/prq_cdr/stop.sh >>"/home/t3point/prq_cdr/killme.txt"
 ping 127.0.0.1 -c 4
 ps -ef | grep prq_cdr/bin | grep java | grep -v grep | awk '{print $2}' | xargs kill -9
-java -Dfile.encoding=UTF-8 -classpath ".:/home/t3point/prq_cdr/bin:/home/t3point/prq_cdr/libs/mysql-connector-java-5.1.35.jar:/home/t3point/prq_cdr/libs/log4j-1.2.17.jar" kr.co.prq.prq_cdr.PRQ_CDR /home/t3point/prq_cdr 1>/dev/null 2>&1 &
+
+echo 'PRQ_CDR starting.....'
+cd /home/t3point/prq_cdr
+
+java -Dfile.encoding=UTF-8 -classpath /home/t3point/prq_cdr/bin:/home/t3point/prq_cdr/libs/mysql-connector-java-5.1.35.jar:/home/t3point/prq_cdr/libs/log4j-1.2.17.jar:. kr.co.prq.prq_cdr.PRQ_CDR 1>/dev/null 2>&1 &

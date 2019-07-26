@@ -9,12 +9,17 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 import com.mysql.jdbc.exceptions.MySQLIntegrityConstraintViolationException;
@@ -34,8 +39,11 @@ public class Prq_cmd_queue {
 	/**
 	 * prq_cdr 테이블의 데이터를 처리하기 위한 주요한 처리를 수행한다.
 	 */
+	@SuppressWarnings({"unused", "unused"})
 	public static void doMainProcess() {
 		Connection con = DBConn.getConnection();
+		
+		Connection conCashq = DBConnCashq.getConnection();
 		
 		String cd_date="",cd_id="",cd_port="",cd_callerid="",cd_calledid="",img_url="",result_msg="",mms_title="",cd_tel="",cd_hp="",message="",cd_name="",chk_limit_date="";				
 		/* 상점 정보*/
@@ -46,13 +54,28 @@ public class Prq_cmd_queue {
 		String last_cdr="first_sent";		
 		String gc_ipaddr="123.142.52.91";
 		String is_blogon="off";		
+
+		String code_5009 = ""; /* cashq.0507_point.point */
+		String code_5010 = ""; /* cashq.store.biz_code */
+		String code_5011 = ""; /* cashq.store.seq */
+		
+		String biz_code = "";
+
+		String  conn_edt = "";
+		String  service_sdt = "";
+		String  service_edt =  "";
+		String end_dt = "";
+		String called_hangup_dt = "";
+		String unique_id = "";
+		
 		String[] mno_limit = new String[2];
 		boolean chk_mms = true,is_test = true;		
 		boolean is_hp = false,is_shophp=false,is_hpcall = false,is_set_limit = false;
+		boolean is_cid_point =false;
 		Long startTime=0L,endTime=0L,totalTime=0L;
 	
 		/* 상점 정보 */
-		String[] store_info			= new String[10];
+		String[] store_info			= new String[11];
 		/* happycall_info */
 		String[] happycall_info	= new String[20];
 		/* 콜로그 데이터 */
@@ -63,9 +86,12 @@ public class Prq_cmd_queue {
 		String[] gcm_log	= new String[8];
 		/* gcm_log 데이터 */
 		String[] happy_log	= new String[3];
+
+		Map<String, String> point_event_dt = new HashMap<String, String>();
+		Map<String, String> cidpoint_info = new HashMap<String, String>();
 		
-		if (con != null) {
-			MyDataObject dao = new MyDataObject();
+		if (con != null && conCashq != null) {
+			MyDataObject prq = new MyDataObject();
 			StringBuilder sb = new StringBuilder();
 			/* 1. `prq_cdr`이 cd_state=0 인 결과를 15개 불러 온다. */
 			sb.append("select * from prq.prq_cdr  ");
@@ -75,45 +101,50 @@ public class Prq_cmd_queue {
 			
 			try {
 				startTime = System.currentTimeMillis();
-				dao.openPstmt(sb.toString());
-				dao.setRs(dao.pstmt().executeQuery());
+				prq.openPstmt(sb.toString());
+				prq.setRs(prq.pstmt().executeQuery());
 				/* 2. 블랙 리스트 가져오기 */
 				black_list=get_black();
 				
-				while(dao.rs().next()) 
+				while(prq.rs().next()) 
 				{
 					PRQ_CDR.heart_beat = 1;
 					String hist_table = DBConn.isExistTableYYYYMM();
+					
 					/* 소비자에게 걸려온 전화가 핸드폰인가? */
-					is_hp=checkPattern("phone",dao.rs().getString("cd_callerid"));
+					is_hp=checkPattern("phone",prq.rs().getString("cd_callerid"));
 					/*	String cd_callerid, 수신인, 매장에 전화건 손님 */
-					cd_callerid=chkValue(dao.rs().getString("cd_callerid"));
+					cd_callerid=chkValue(prq.rs().getString("cd_callerid"));
 					// cd_callerid="0166551377";
 					/*	String cd_date 날짜정보, */
-					cd_date=chkValue(dao.rs().getString("cd_date"));
+					
+					cd_date=chkValue(prq.rs().getString("cd_date"));
 					cd_date=chgDatetime(cd_date);
 					System.out.print(cd_date+" : ");
 					/*	String cd_id 아이디  */
-					cd_id=chkValue(dao.rs().getString("cd_id"));
+					cd_id=chkValue(prq.rs().getString("cd_id"));
 					/*	String cd_port 콜로그 포트 */
-					cd_port=chkValue(dao.rs().getString("cd_port"));
+					cd_port=chkValue(prq.rs().getString("cd_port"));
 					/*	String cd_calledid, 발신 */
-					cd_calledid=chkValue(dao.rs().getString("cd_calledid"));
+					cd_calledid=chkValue(prq.rs().getString("cd_calledid"));
 					/*	String cd_name, 매장 이름 */
-					cd_name=chkValue(dao.rs().getString("cd_name"));
+					cd_name=chkValue(prq.rs().getString("cd_name"));
 					/*	String cd_tel, 매장 일반 번호 */
-					cd_tel=chkValue(dao.rs().getString("cd_tel"));
+					cd_tel=chkValue(prq.rs().getString("cd_tel"));
 					/*	String cd_hp, 매장 사장님 발신 핸드폰 */
-					cd_hp=chkValue(dao.rs().getString("cd_hp"));
+					cd_hp=chkValue(prq.rs().getString("cd_hp"));
 					/*	Int cd_state 상태코드, */
-					cd_state=dao.rs().getInt("cd_state");
+					cd_state=prq.rs().getInt("cd_state");
 					/*	Int cd_day_cnt 일별전송갯수, */
-					cd_day_cnt=dao.rs().getInt("cd_day_cnt");
+					cd_day_cnt=prq.rs().getInt("cd_day_cnt");
 					/*	Int cd_day_limit 일별제한 갯수. */
-					cd_day_limit=dao.rs().getInt("cd_day_limit");
+					cd_day_limit=prq.rs().getInt("cd_day_limit");
 					/*	Int cd_device_day_cnt 매장사장님 핸드폰에서 수동혹은 타 앱으로 전송한 갯수 */
-					cd_device_day_cnt=dao.rs().getInt("cd_device_day_cnt");
-			
+					cd_device_day_cnt=prq.rs().getInt("cd_device_day_cnt");
+					
+					System.out.println(cd_hp);
+					
+					
 					/* 3. 일반 번호 입니까? */
 					if(!is_hp){
 						result_msg= "일반번호";
@@ -279,6 +310,7 @@ public class Prq_cmd_queue {
 					if(mn_mms_limit==0){
 						
 						
+						
 					}else if(is_set_limit){
 						/*gcm 로그 발생*/
 						result_msg="150건초과";
@@ -333,6 +365,77 @@ public class Prq_cmd_queue {
 					********************************************************************************/
 					}
 
+					
+					/********************************************************************************
+					 * 10. cid_point 추가 부분  
+					 *  상기 포인트는 다음과 같은 조건을 만족 할 때 생성한다.
+					 * 10-1. prq.prq_store.st_no의 코드가 5008인것을 조회하여 Y인지를 판별한다. 
+					 * 10-2. cid_point를 사용하도록 되었다면
+					 *********************************************************************************/
+					
+					/* 10-1. prq.prq_store.st_no의 코드가 5008인것을 조회하여 Y인지를 판별하여 Y이면 true, 아니면 false를 담는다.. */
+					is_cid_point = check_cid_point(st_no);
+						
+					/* 10-2. cid_point를 사용하도록 되었다면 
+					 * 
+					 * */
+					if(is_cid_point&&is_hp)
+					{
+						/* 시아이디 포인트 적립 금액 */
+						code_5009 = get_code(st_no, "5009");
+						
+						/* 시아이디 포인트 설정 cashq.biz_code */
+						code_5010 = get_code(st_no, "5010");
+						
+						/* 코드 명 5010을  biz_code 변수에 담는다. */
+						biz_code = code_5010;
+
+						/* 시아이디 포인트 설정 cashq.biz_code */
+						code_5011 = get_code(st_no, "5011");
+						
+						
+						/* 콜로그를 발생한 시점에서 20초를 더하여 "종료시간"(end_dt)에 담는다. */
+						end_dt = add_second(cd_date, 20);
+						
+						/* 콜로그를 발생한 시점에서 7초를 더하여 "전화기를 든 시간"(called_hangup_dt) 에 담는다. */
+						called_hangup_dt = add_second(cd_date, 7);
+
+						/* 콜로그를 발생한 시점에서 7초를 더하여 "연결 종료 시간"(conn_edt) 에 담는다. */
+						conn_edt = add_second(cd_date,20);
+						
+						/* 콜로그를 발생한 시점에서 7초를 더하여 "서비스 연결 시간"(service_sdt) 에 담는다. */
+						service_sdt = add_second(cd_date,7);
+						
+						/*  "연결 종료 시간"(conn_edt)을 "서비스 종료 시간"(conn_edt) 에 담는다. */
+						service_edt =  conn_edt;
+						unique_id = Long.toString(Utils.date2unix(cd_date));
+						
+						
+						
+						
+						
+
+						cidpoint_info.put("mb_hp",cd_callerid);
+						cidpoint_info.put("prq_store.mb_id",cd_id);
+						cidpoint_info.put("prq_store.st_no",st_no);
+						cidpoint_info.put("prq_store.st_name", store_info[1]);
+						cidpoint_info.put("prq_store.cid_point",code_5009);
+						cidpoint_info.put("prq_store.biz_code",biz_code);
+						cidpoint_info.put("store.seq",code_5011);
+						cidpoint_info.put("store.tel",store_info[10]);
+
+						/* cid 포인트 가맹점이고 핸드폰 번호라면 175.126.82.182.sktl.safen_cdr 로 콜로그를 생성한다.
+						 * */	
+						set_cidpoint_log(cidpoint_info);
+						
+						
+					}
+
+					/* if(is_cid_point&&is_hp){...}
+					 * 
+					 *  
+					 *  */
+
 					/********************************************************************************
 					* 9-4. curl->simple_post('http://prq.co.kr/prq/set_gcm.php')
 					* - 수신거부 중복, 150건 제한 혹은 설정한 일수 제한 아닌 경우만
@@ -343,7 +446,9 @@ public class Prq_cmd_queue {
 						//set_gcmurl(message,st_no,mms_title,cd_callerid,cd_hp,st_thumb_paper,false);
 						set_gcmurl(message,st_no,store_info[6],cd_callerid,cd_hp,store_info[5],false);
 					}
-	
+
+
+					
 					/* 발송 처리 핸드폰 일반 번호 */
 					//Utils.getLogger().info(cd_date+" : cnt "+ my_device_cnt+" / limit "+mn_mms_limit+" cd_callerid : "+cd_callerid+" cd_hp : "+cd_hp);
 					cdr_info[0]=cd_date;
@@ -354,32 +459,7 @@ public class Prq_cmd_queue {
 					set_sendcdr(cdr_info);
 					System.out.println("전송");
 					
-					happy_log=get_happycall();
-					/* [01086033821(hc_hp), 331(st_no), (hc_no)] */
-					//store_info=get_storeno(happycall_info[1]);
-					
-					
-					//is_set_limit=is_limit(store_info[4]);
-					//hc_status=is_set_limit?"2":"1";
-					
-					//set_happycall_log(hc_status,happy_log[2]);
-					//is_hpcall=!happy_log[0].equals("-1");
-					
-					
-					
-					//result_msg= my_device_cnt+"/"+mn_mms_limit+"건 제한";
-					//System.out.println(result_msg);
-					//if(get_blog_yn(st_no).equals("on")&&is_hp&&is_release)
-					//	set_happycall(cd_callerid,st_no);
-					//if(is_hpcall&&!is_set_limit)
-					//{
-					//	happycall_info[0]=happy_log[0];
-					//	happycall_info[1]=happy_log[1];
-					//	happycall_info[2]=Integer.toString(my_device_cnt);
-					//	happycall_info[3]=Integer.toString(mn_mms_limit);
-					//	set_happycall_mms(is_set_limit,is_hp,happycall_info);
-					//	System.out.println("happycall 전송");
-					//}/* if(is_hpcall){...}*/
+					//happy_log=get_happycall();
 				}/* while(dao.rs().next()){...} */	
 			}catch (SQLException e){
 				Utils.getLogger().warning(e.getMessage());
@@ -390,12 +470,12 @@ public class Prq_cmd_queue {
 				DBConn.latest_warning = "ErrPOS002";
 				Utils.getLogger().warning(Utils.stack(e));
 			}finally{
-				dao.closePstmt();
+				prq.closePstmt();
 		        endTime = System.currentTimeMillis();
 		        /* 처리 완료 건 이동 */
 		        set_hist();
 		        // 시간 출력
-		        System.out.println("##  소요시간(초.0f) : " + ( endTime - startTime )/1000.0f +"초");
+		        //System.out.println("##  소요시간(초.0f) : " + ( endTime - startTime )/1000.0f +"초");
 			}
 		}
 	}
@@ -544,6 +624,7 @@ public class Prq_cmd_queue {
 		StringBuilder sb = new StringBuilder();
 		MyDataObject dao = new MyDataObject();
 		
+		
 //		sb.append("SELECT count(*) cnt FROM `prq_mms_log` ");
 //		sb.append("where mm_sender=? ");
 //		sb.append("and left(mm_result,3)='200' ");
@@ -691,7 +772,7 @@ public class Prq_cmd_queue {
 	 */
  	private static String[] get_store(String[] str)
     {
-		String[] s = new String[10]; 
+		String[] s = new String[11]; 
 		StringBuilder sb = new StringBuilder();
 		s[0]="0";
 		s[1]="150";
@@ -703,6 +784,8 @@ public class Prq_cmd_queue {
 		s[7]="150";
 		s[8]="150";
 		s[9]="150";
+		s[10]="050-0000-0000";
+		
 		MyDataObject dao = new MyDataObject();
 				
 		sb.append("SELECT ");
@@ -715,7 +798,8 @@ public class Prq_cmd_queue {
 		sb.append(" st_top_msg, ");
 		sb.append(" st_middle_msg,");
 		sb.append(" st_bottom_msg, ");
-		sb.append(" st_modoo_url ");
+		sb.append(" st_modoo_url, ");
+		sb.append(" st_vtel ");
 		sb.append(" from ");
 		sb.append("prq_store ");
 		sb.append("where ");
@@ -739,6 +823,7 @@ public class Prq_cmd_queue {
 				s[7]=dao.rs().getString("st_middle_msg");
 				s[8]=dao.rs().getString("st_bottom_msg");
 				s[9]=dao.rs().getString("st_modoo_url");
+				s[10]=dao.rs().getString("st_vtel");
 			}			
 		} catch (SQLException e) {
 			Utils.getLogger().warning(e.getMessage());
@@ -768,7 +853,7 @@ public class Prq_cmd_queue {
  	
  	private static String[] get_store_kt(String[] str)
     {
-		String[] s = new String[10]; 
+		String[] s = new String[11]; 
 		s[0]="0";
 		s[1]="150";				
 		s[2]="150";				
@@ -778,7 +863,9 @@ public class Prq_cmd_queue {
 		s[6]="150";				
 		s[7]="150";				
 		s[8]="150";				
-		s[9]="150";		
+		s[9]="150";				
+		s[10]="050-0000-0000";
+		
 		StringBuilder sb = new StringBuilder();
 		MyDataObject dao = new MyDataObject();
 	
@@ -792,7 +879,9 @@ public class Prq_cmd_queue {
 		sb.append(" st_top_msg, ");
 		sb.append(" st_middle_msg,");
 		sb.append(" st_bottom_msg, ");
-		sb.append(" st_modoo_url ");
+		sb.append(" st_modoo_url, ");
+		sb.append(" st_vtel ");
+		
 		sb.append(" from ");
 		sb.append("prq_store ");
 		sb.append("where ");
@@ -817,6 +906,7 @@ public class Prq_cmd_queue {
 				s[7]=dao.rs().getString("st_middle_msg");
 				s[8]=dao.rs().getString("st_bottom_msg");
 				s[9]=dao.rs().getString("st_modoo_url");
+				s[10]=dao.rs().getString("st_vtel");
 			}			
 		} catch (SQLException e) {
 			Utils.getLogger().warning(e.getMessage());
@@ -1409,7 +1499,7 @@ public class Prq_cmd_queue {
 	 	
 	 	private static String[] get_storeno(String st_no)
 	    {
-			String[] s = new String[10]; 
+			String[] s = new String[11]; 
 			s[0]="0";
 			s[1]="150";				
 			s[2]="150";				
@@ -1419,7 +1509,8 @@ public class Prq_cmd_queue {
 			s[6]="150";				
 			s[7]="150";				
 			s[8]="150";				
-			s[9]="150";		
+			s[9]="150";				
+			s[10]="050-0000-0000";		
 			StringBuilder sb = new StringBuilder();
 
 			MyDataObject dao = new MyDataObject();
@@ -1434,7 +1525,9 @@ public class Prq_cmd_queue {
 			sb.append(" st_top_msg, ");
 			sb.append(" st_middle_msg,");
 			sb.append(" st_bottom_msg, ");
-			sb.append(" st_modoo_url ");
+			sb.append(" st_modoo_url, ");
+			sb.append(" st_vtel ");
+			
 			sb.append(" from ");
 			sb.append("prq_store ");
 			sb.append("where ");
@@ -1457,6 +1550,7 @@ public class Prq_cmd_queue {
 					s[7]=dao.rs().getString("st_middle_msg");
 					s[8]=dao.rs().getString("st_bottom_msg");
 					s[9]=dao.rs().getString("st_modoo_url");
+					s[10]=dao.rs().getString("st_tel");					
 				}			
 			} catch (SQLException e) {
 				Utils.getLogger().warning(e.getMessage());
@@ -1535,6 +1629,15 @@ public class Prq_cmd_queue {
 			}else{
 				msg.add(store_info[7].replaceAll("(\\r|\\n)","<br>"));
 			}
+			/*
+			if(){
+				msg.add("");
+				msg.add("리뷰 이벤트 (CU 2,000원 or 현금 즉시 지급)");
+				msg.add("http://prq.co.kr/prq/blog/event/"+store_info[0]);
+				
+				
+			}else
+			*/
 			
 			if(get_blog_yn(store_info[0]).equals("on"))
 			{
@@ -1542,6 +1645,9 @@ public class Prq_cmd_queue {
 				msg.add("리뷰 이벤트 (2,000원 지급)");
 				msg.add("http://prq.co.kr/prq/blog/write/"+store_info[0]);
 			}
+			
+
+			
 			msg.add(st_bottom_msg);
 			msg.add(st_modoo_url);
 
@@ -1660,4 +1766,274 @@ public class Prq_cmd_queue {
 				dao.closePstmt();
 			}
 	    }
+
+
+		/**
+	     * ResultSet을 Row마다 Map에 저장후 List에 다시 저장.
+	     * @param rs DB에서 가져온 ResultSet
+	     * @return Listt<map> 형태로 리턴
+	     * @throws Exception Collection
+	     */
+	    private static Map<String, String> getResultMapRows(ResultSet rs) throws Exception
+	    {
+	        // ResultSet 의 MetaData를 가져온다.
+	        ResultSet metaData = (ResultSet) rs;
+	        // ResultSet 의 Column의 갯수를 가져온다.
+	        
+	        int sizeOfColumn = metaData.getMetaData().getColumnCount();
+	        
+	        Map<String, String> list = new HashMap<String, String>();
+	        
+	        String column_name;
+	        
+	        // rs의 내용을 돌려준다.
+	        if(sizeOfColumn>0)
+	        {
+	            // Column의 갯수만큼 회전
+	            for (int indexOfcolumn = 0; indexOfcolumn < sizeOfColumn; indexOfcolumn++)
+	            {
+	                column_name = metaData.getMetaData().getColumnName(indexOfcolumn + 1);
+	                // map에 값을 입력 map.put(columnName, columnName으로 getString)
+	                list.put(column_name,rs.getString(column_name));
+
+	            }
+	        }
+	        return list;
+	    }
+	    // 출처: https://moonleafs.tistory.com/52 [달빛에 스러지는 낙엽들.]
+	    
+	    
+
+		/**
+		 * 시아이디 포인트 사용 여부
+		 *
+		 * @author Taebu Moon <mtaebu@gmail.com>
+		 * @param string $st_no  상점아이디
+		 * @return boolean
+		 */
+	 	private static boolean check_cid_point(String st_no)
+	    {
+
+			String sql="";
+			boolean retVal = false;
+			MyDataObject dao = new MyDataObject();		
+			sql="select ";
+			sql+="pv_value ";
+			sql+="from ";
+			sql+="prq_values ";
+			sql+="where ";
+			sql+="pv_code='5008' ";
+			sql+="and pv_no='"+st_no+"';";
+	 
+			try {
+				dao.openPstmt(sql);
+				dao.setRs(dao.pstmt().executeQuery());
+				if(dao.rs().next()){
+					if(dao.rs().getString("pv_value").equals("Y"))
+					{
+						retVal = true;
+					}
+				}
+			} catch (SQLException e) {
+				Utils.getLogger().warning(e.getMessage());
+				DBConn.latest_warning = "ErrPOS021";
+				e.printStackTrace();
+			}
+			catch (Exception e) {
+				Utils.getLogger().warning(e.getMessage());
+				Utils.getLogger().warning(Utils.stack(e));
+				DBConn.latest_warning = "ErrPOS022";
+			}
+			finally {
+				dao.closePstmt();
+			}
+			return retVal;
+	    }
+
+		/**
+		 *  코드 정보 가져오기
+		 *
+		 * @author Taebu Moon <mtaebu@gmail.com>
+		 * @param string $st_no  상점아이디
+		 * @param string $code  코드명
+		 * @return code_value 코드 값
+		 */
+	 	private static String get_code(String st_no,String code)
+	    {
+
+			String sql="";
+			String code_value = "";
+			MyDataObject dao = new MyDataObject();		
+			sql="select ";
+			sql+="pv_value ";
+			sql+="from ";
+			sql+="prq_values ";
+			sql+="where ";
+			sql+="pv_code='"+code+"' ";
+			sql+="and pv_no='"+st_no+"';";
+	 
+			try {
+				dao.openPstmt(sql);
+				dao.setRs(dao.pstmt().executeQuery());
+				if(dao.rs().next()){
+					code_value = dao.rs().getString("pv_value");
+				}
+			} catch (SQLException e) {
+				Utils.getLogger().warning(e.getMessage());
+				DBConn.latest_warning = "ErrPOS021";
+				e.printStackTrace();
+			}
+			catch (Exception e) {
+				Utils.getLogger().warning(e.getMessage());
+				Utils.getLogger().warning(Utils.stack(e));
+				DBConn.latest_warning = "ErrPOS022";
+			}
+			finally {
+				dao.closePstmt();
+			}
+			return code_value;
+	    }
+
+
+
+		/**
+		 * get_point_event_dt
+		 * 포인트 이벤트 정보를 불러 온다. 
+		 * @param biz_code(biz_code)
+		 * @return point_event_dt <Stirng,String>
+		 */
+		private static Map<String, String> get_point_event_dt(String biz_code) {
+			// TODO Auto-generated method stub
+			Map<String, String> point_event_dt=new HashMap<String, String>();
+
+			
+			StringBuilder sb = new StringBuilder();
+			MyDataObjectCashq cashq = new MyDataObjectCashq();
+			
+			sb.append("SELECT * FROM cashq.point_event_dt where biz_code=? limit 1");
+			try {
+				cashq.openPstmt(sb.toString());
+				cashq.pstmt().setString(1, biz_code);
+				//System.out.println(seq);
+				cashq.setRs (cashq.pstmt().executeQuery());
+
+				while(cashq.rs().next()) 
+				{
+					point_event_dt = getResultMapRows(cashq.rs());
+				}			
+			}catch (SQLException e) {
+				Utils.getLogger().warning(e.getMessage());
+				DBConn.latest_warning = "ErrPOS039";
+				e.printStackTrace();
+			}catch (Exception e) {
+				Utils.getLogger().warning(e.getMessage());
+				Utils.getLogger().warning(Utils.stack(e));
+				DBConn.latest_warning = "ErrPOS040";
+			}
+			finally {
+				cashq.closePstmt();
+			}
+			return point_event_dt;
+		}
+		
+		
+		/**
+		 * 시아이디 포인트를 서버 로그에 기록합니다.
+		 *
+		 * @author Taebu Moon <mtaebu@gmail.com>
+		 * @param string $table 게시판 테이블
+		 * @param string $id 게시물번호
+		 * @return array
+		 */
+		private static void set_cidpoint_log(Map<String, String> cidpoint_info)
+	    {
+			StringBuilder sb = new StringBuilder();
+
+			MyDataObject prq = new MyDataObject();
+			MyDataObjectCashq cashq = new MyDataObjectCashq();
+
+			sb.append("INSERT INTO `prq`.`prq_cidpoint_log` SET ");
+			sb.append("`mb_hp` =?,"); 
+			sb.append("`prq_store.mb_id` =?,"); 
+			sb.append("`prq_store.st_no` =?,"); 
+			sb.append("`prq_store.st_name` =?,"); 
+			sb.append("`prq_store.cid_point` =?,"); 
+			sb.append("`prq_store.biz_code` =?,"); 
+			sb.append("`store.seq` =?,");
+			sb.append("`store.tel` =?,");
+			sb.append("`cp_datetime` =now();"); 
+			
+
+
+			try {
+				cashq.openPstmt(sb.toString());
+				cashq.pstmt().setString(1, cidpoint_info.get("mb_hp"));
+				cashq.pstmt().setString(2, cidpoint_info.get("prq_store.mb_id"));
+				cashq.pstmt().setString(3, cidpoint_info.get("prq_store.st_no"));
+				cashq.pstmt().setString(4, cidpoint_info.get("prq_store.st_name"));
+				cashq.pstmt().setString(5, cidpoint_info.get("prq_store.cid_point"));
+				cashq.pstmt().setString(6, cidpoint_info.get("prq_store.biz_code"));
+				cashq.pstmt().setString(7, cidpoint_info.get("store.seq"));
+				cashq.pstmt().setString(8, cidpoint_info.get("store.tel"));
+				
+				/* 조회한 콜로그의 일 발송량 갱신 */
+				cashq.pstmt().executeUpdate();
+				
+				prq.openPstmt(sb.toString());
+				prq.pstmt().setString(1, cidpoint_info.get("mb_hp"));
+				prq.pstmt().setString(2, cidpoint_info.get("prq_store.mb_id"));
+				prq.pstmt().setString(3, cidpoint_info.get("prq_store.st_no"));
+				prq.pstmt().setString(4, cidpoint_info.get("prq_store.st_name"));
+				prq.pstmt().setString(5, cidpoint_info.get("prq_store.cid_point"));
+				prq.pstmt().setString(6, cidpoint_info.get("prq_store.biz_code"));
+				prq.pstmt().setString(7, cidpoint_info.get("store.seq"));
+				prq.pstmt().setString(8, cidpoint_info.get("store.tel"));
+				
+				/* 조회한 콜로그의 일 발송량 갱신 */
+				prq.pstmt().executeUpdate();
+							
+			} catch (SQLException e) {
+				Utils.getLogger().warning(e.getMessage());
+				DBConn.latest_warning = "ErrPOS023";
+				e.printStackTrace();
+			}
+			catch (Exception e) {
+				Utils.getLogger().warning(e.getMessage());
+				Utils.getLogger().warning(Utils.stack(e));
+				DBConn.latest_warning = "ErrPOS024";
+			}
+			finally {
+				cashq.closePstmt();
+				prq.closePstmt();
+			}
+	    }	
+
+		
+		/**
+		 *  add_second 함수를 실행한다.
+		 * @param string_date "2019-06-26 09:18:40" 형식으로 입력
+		 * @param add_second 더할 시간 만큼 초를 Int형으로 입력한다.
+		 * @return String 으로 리턴한다.
+		 */
+		private static String add_second(String string_date, int add_second)
+		{
+			DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+	   		Date date = null;
+
+	  		try {
+	  			date = dateFormat.parse(string_date);
+	  		} catch (ParseException e) {
+	  			// TODO Auto-generated catch block
+	           e.printStackTrace();
+	           System.err.println("형식이 올바르지 않습니다.");
+	        }
+
+			Calendar cal = Calendar.getInstance();
+			cal.setTime(date);
+			cal.add(Calendar.SECOND, add_second);
+			//System.out.println(date);
+			// System.out.println(cal.getTime());
+			String strDate = dateFormat.format(cal.getTime());
+			return strDate;
+		}
 }
