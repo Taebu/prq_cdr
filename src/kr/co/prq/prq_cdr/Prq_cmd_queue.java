@@ -92,6 +92,7 @@ public class Prq_cmd_queue {
 		
 		if (con != null && conCashq != null) {
 			MyDataObject prq = new MyDataObject();
+			MyDataObjectCashq cashq = new MyDataObjectCashq();
 			StringBuilder sb = new StringBuilder();
 			/* 1. `prq_cdr`이 cd_state=0 인 결과를 15개 불러 온다. */
 			sb.append("select * from prq.prq_cdr  ");
@@ -101,6 +102,8 @@ public class Prq_cmd_queue {
 			
 			try {
 				startTime = System.currentTimeMillis();
+				cashq.openPstmt("select 1;");
+				cashq.pstmt().executeQuery();
 				prq.openPstmt(sb.toString());
 				prq.setRs(prq.pstmt().executeQuery());
 				/* 2. 블랙 리스트 가져오기 */
@@ -215,7 +218,7 @@ public class Prq_cmd_queue {
 						cdr_info[1]=cd_id;
 						cdr_info[2]=cd_port;
 						cdr_info[3]=cd_callerid;
-						cdr_info[4]="6";
+						cdr_info[4]="8";
 						set_sendcdr(cdr_info);
 						System.out.println(result_msg);
 						continue;					
@@ -423,7 +426,8 @@ public class Prq_cmd_queue {
 						cidpoint_info.put("prq_store.biz_code",biz_code);
 						cidpoint_info.put("store.seq",code_5011);
 						cidpoint_info.put("store.tel",store_info[10]);
-
+						System.out.println(cidpoint_info);
+						
 						/* cid 포인트 가맹점이고 핸드폰 번호라면 175.126.82.182.sktl.safen_cdr 로 콜로그를 생성한다.
 						 * */	
 						set_cidpoint_log(cidpoint_info);
@@ -471,6 +475,7 @@ public class Prq_cmd_queue {
 				Utils.getLogger().warning(Utils.stack(e));
 			}finally{
 				prq.closePstmt();
+				cashq.closePstmt();
 		        endTime = System.currentTimeMillis();
 		        /* 처리 완료 건 이동 */
 		        set_hist();
