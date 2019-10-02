@@ -89,6 +89,9 @@ public class Prq_cmd_queue {
 
 		Map<String, String> point_event_dt = new HashMap<String, String>();
 		Map<String, String> cidpoint_info = new HashMap<String, String>();
+		Map<String, String> codes = new HashMap<String, String>();
+		Map<String, String> munjac = new HashMap<String, String>();
+		Map<String, String> munjac_log = new HashMap<String, String>();
 		
 		if (con != null && conCashq != null) {
 			MyDataObject prq = new MyDataObject();
@@ -102,8 +105,8 @@ public class Prq_cmd_queue {
 			
 			try {
 				startTime = System.currentTimeMillis();
-				cashq.openPstmt("select 1;");
-				cashq.pstmt().executeQuery();
+				
+				
 				prq.openPstmt(sb.toString());
 				prq.setRs(prq.pstmt().executeQuery());
 				/* 2. 블랙 리스트 가져오기 */
@@ -204,6 +207,54 @@ public class Prq_cmd_queue {
 						config[1]=cd_port;
 						store_info=get_store(config);
 						st_no=store_info[0];
+					}
+					
+					/* 상점의 모든 코드 정보를 불러온다. */
+					codes = get_codes(st_no);
+					boolean is_munjac = false;
+					boolean is_munjac_result = false;
+					is_munjac = codes.containsKey("code_5012");
+					
+					is_munjac = is_munjac && codes.get("code_5012").equals("munjac");
+					
+					if(is_munjac)
+					{
+						munjac.put("cid",cd_callerid);
+						munjac.put("rid",store_info[4]);
+						munjac.put("mid",codes.get("code_5013"));
+						munjac.put("text","");
+
+						
+						/* 문자 전송 하는 곳에 문자를 전송하고 결과 값을 가져온다. */
+						is_munjac_result = set_munjac(munjac);
+						
+						result_msg="문자씨로 전송한다.";
+						cdr_info[0]=cd_date;
+						cdr_info[1]=cd_id;
+						cdr_info[2]=cd_port;
+						cdr_info[3]=cd_callerid;
+						if(is_munjac_result)
+						{
+							cdr_info[4]="21";
+						}else {
+							cdr_info[4]="22";
+						}
+						set_sendcdr(cdr_info);
+						
+						munjac_log.put("ml_cid",cd_callerid);
+						munjac_log.put("ml_rid",store_info[4]);
+						munjac_log.put("ml_mid",codes.get("code_5013"));
+						munjac_log.put("ml_txt","");
+						munjac_log.put("st_no",store_info[0]);
+						
+						if(is_munjac_result)
+						{
+							munjac_log.put("ml_result","true");
+						}else {
+							munjac_log.put("ml_result","false");
+						}
+						/* 문자씨 전송한 결과를 로그로 기록 한다. */
+						set_munjac_log(munjac_log);
 					}
 					
 					is_shophp=checkPattern("phone",store_info[4]);
@@ -385,16 +436,16 @@ public class Prq_cmd_queue {
 					if(is_cid_point&&is_hp)
 					{
 						/* 시아이디 포인트 적립 금액 */
-						code_5009 = get_code(st_no, "5009");
+						code_5009 = codes.get("code_5009");
 						
 						/* 시아이디 포인트 설정 cashq.biz_code */
-						code_5010 = get_code(st_no, "5010");
+						code_5010 = codes.get("code_5010");
 						
 						/* 코드 명 5010을  biz_code 변수에 담는다. */
 						biz_code = code_5010;
 
 						/* 시아이디 포인트 설정 cashq.biz_code */
-						code_5011 = get_code(st_no, "5011");
+						code_5011 = codes.get("code_5011");
 						
 						
 						/* 콜로그를 발생한 시점에서 20초를 더하여 "종료시간"(end_dt)에 담는다. */
@@ -486,6 +537,123 @@ public class Prq_cmd_queue {
 	}
 
     /**
+	 * @param munjac_log
+	 */
+	private static void set_munjac_log(Map<String, String> munjac_log) {
+		// TODO Auto-generated method stub
+		StringBuilder sb = new StringBuilder();
+		MyDataObject prq = new MyDataObject();
+		
+		sb.append("INSERT INTO `prq`.`prq_munjac_log` SET ");
+		sb.append("`ml_cid`=?,"); 
+		sb.append("`ml_rid` =?,"); 
+		sb.append("`ml_mid` =?,"); 
+		sb.append("`ml_txt` =?,"); 
+		sb.append("`st_no` =?,");
+		sb.append("`ml_result` =?,");
+		sb.append("`ml_datetime` =now();"); 
+		
+		try {
+			
+			prq.openPstmt(sb.toString());
+			prq.pstmt().setString(1, munjac_log.get("ml_cid"));
+			prq.pstmt().setString(2, munjac_log.get("ml_rid"));
+			prq.pstmt().setString(3, munjac_log.get("ml_mid"));
+			prq.pstmt().setString(4, munjac_log.get("ml_txt"));
+			prq.pstmt().setString(5, munjac_log.get("st_no"));
+			prq.pstmt().setString(6, munjac_log.get("ml_result"));
+			
+			/* 조회한 콜로그의 일 발송량 갱신 */
+			prq.pstmt().executeUpdate();
+						
+		} catch (SQLException e) {
+			Utils.getLogger().warning(e.getMessage());
+			DBConn.latest_warning = "ErrPOS023";
+			e.printStackTrace();
+		}
+		catch (Exception e) {
+			Utils.getLogger().warning(e.getMessage());
+			Utils.getLogger().warning(Utils.stack(e));
+			DBConn.latest_warning = "ErrPOS024";
+		}
+		finally {
+			prq.closePstmt();
+		}
+	}
+
+	/**
+	 * @return
+	 */
+	private static boolean set_munjac(Map<String, String> munjac) {
+		// TODO Auto-generated method stub
+		String query="";
+		URL targetURL;
+		URLConnection urlConn;
+		boolean result = false;
+		query+="cid="+munjac.get("cid");
+		query+="&rid="+munjac.get("rid");
+		query+="&mid="+munjac.get("mid");
+		
+		if(!munjac.get("text").equals("null")||!munjac.get("text").equals(""))
+		{
+			query+="&text="+munjac.get("text");
+		}
+		
+		try {
+			
+			targetURL = new URL("https://imkaching.com/cidtxt_anpr.html?"+query);
+			urlConn = targetURL.openConnection();
+			HttpURLConnection cons = (HttpURLConnection) urlConn;
+			// 헤더값을 설정한다.
+			cons.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+
+			cons.setRequestMethod("POST");
+			//cons.getOutputStream().write("LOGIN".getBytes("UTF-8"));
+			cons.setDoOutput(true);
+			cons.setDoInput(true);
+			cons.setUseCaches(false);
+			cons.setDefaultUseCaches(false);
+			
+			/*
+			PrintWriter out = new PrintWriter(cons.getOutputStream());
+			out.close();*/
+			//System.out.println(query);
+			OutputStream opstrm=cons.getOutputStream();
+			opstrm.write(query.getBytes());
+			opstrm.flush();
+			opstrm.close();
+
+			String buffer = null;
+			String bufferHtml="";
+			BufferedReader in = new BufferedReader(new InputStreamReader(cons.getInputStream()));
+
+			 while ((buffer = in.readLine()) != null) {
+				 bufferHtml += buffer;
+			}
+			 
+			 if(bufferHtml.equals("true"))
+			 {
+				 result = true;
+			 }
+			//Utils.getLogger().info(bufferHtml);
+			in.close();				
+		} catch (MalformedURLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+			Utils.getLogger().warning(e.getMessage());
+			Utils.getLogger().warning(Utils.stack(e));
+			DBConn.latest_warning = "ErrPOS035";
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+			Utils.getLogger().warning(e.getMessage());
+			Utils.getLogger().warning(Utils.stack(e));
+			DBConn.latest_warning = "ErrPOS036";
+		}
+		return result;
+	}
+
+	/**
      * chkValue
 	 *  데이터 유효성 null 체크에 대한 값을 "" 로 리턴한다.
      * @param str
@@ -1901,6 +2069,50 @@ public class Prq_cmd_queue {
 
 
 
+		/**
+		 *  코드 정보들 가져오기
+		 *
+		 * @author Taebu Moon <mtaebu@gmail.com>
+		 * @param string $st_no  상점아이디
+		 * @return codes 코드 값
+		 */
+	 	private static Map<String, String> get_codes(String st_no)
+	    {
+
+			String sql="";
+			Map<String, String> codes = new HashMap<String, String>();
+			
+			MyDataObject dao = new MyDataObject();		
+			
+			sql="select ";
+			sql+="pv_code, ";
+			sql+="pv_value ";
+			sql+="from ";
+			sql+="prq_values ";
+			sql+="where pv_no='"+st_no+"';";
+	 
+			try {
+				dao.openPstmt(sql);
+				dao.setRs(dao.pstmt().executeQuery());
+				while(dao.rs().next()){
+					codes.put("code_"+dao.rs().getString("pv_code"), dao.rs().getString("pv_value"));
+				}
+			} catch (SQLException e) {
+				Utils.getLogger().warning(e.getMessage());
+				DBConn.latest_warning = "ErrPOS021";
+				e.printStackTrace();
+			}
+			catch (Exception e) {
+				Utils.getLogger().warning(e.getMessage());
+				Utils.getLogger().warning(Utils.stack(e));
+				DBConn.latest_warning = "ErrPOS022";
+			}
+			finally {
+				dao.closePstmt();
+			}
+			return codes;
+	    }
+	 	
 		/**
 		 * get_point_event_dt
 		 * 포인트 이벤트 정보를 불러 온다. 
