@@ -117,8 +117,9 @@ public class Prq_cmd_queue {
 					PRQ_CDR.heart_beat = 1;
 					String hist_table = DBConn.isExistTableYYYYMM();
 					
-					/* 소비자에게 걸려온 전화가 핸드폰인가? */
+					/* 소비자에게 걸려온 전화가 핸드폰인가? 01#, 05# */
 					is_hp=checkPattern("phone",prq.rs().getString("cd_callerid"));
+					
 					/*	String cd_callerid, 수신인, 매장에 전화건 손님 */
 					cd_callerid=chkValue(prq.rs().getString("cd_callerid"));
 					// cd_callerid="0166551377";
@@ -1379,8 +1380,9 @@ public class Prq_cmd_queue {
 	  
 	  //휴대폰번호 체크
 	  if("phone".equals(pattern)){
-	   regex = "^01[016789]-?(\\d{3}|\\d{4})-?\\d{4}$";
+	   regex = "^0[15][016789]-?(\\d{3}|\\d{3,5})-?\\d{4}$";
 	  }
+	  
 	  //System.out.println(regex);
 	  okPattern = Pattern.matches(regex, str);
 	  return okPattern;
